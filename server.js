@@ -378,6 +378,26 @@ function shellSafeDockerContainerName(raw, fallback) {
   return fallback;
 }
 
+/**
+ * Одноразовый helper (`docker:*-cli`) часто Alpine без curl, а частный PRO install.sh дергает `curl`/GitHub —
+ * см. сообщество: `curl: command not found`, затем tar «invalid magic».
+ * Установить curl/ca-cert перед `bash ./install.sh`. Отключить: COMMUNITY_HELPER_SKIP_PREPARE_TOOLS=1.
+ */
+function dockerCliHelperEnsureFetchToolsScript() {
+  if (envTruthy(process.env.COMMUNITY_HELPER_SKIP_PREPARE_TOOLS)) return "";
+  return `
+# Инструменты для приватного install.sh (образ Docker CLI может быть без curl)
+if ! command -v curl >/dev/null 2>&1; then
+  if command -v apk >/dev/null 2>&1; then
+    apk add --no-cache curl ca-certificates || echo "⚠ helper: apk add curl failed — приватный install.sh может упасть" >> /mnt/data/community-install-last.log
+  elif command -v apt-get >/dev/null 2>&1; then
+    export DEBIAN_FRONTEND=noninteractive
+    apt-get update -qq >/dev/null && apt-get install -y -qq curl ca-certificates || echo "⚠ helper: apt install curl failed — приватный install.sh может упасть" >> /mnt/data/community-install-last.log
+  fi
+fi
+`.trim();
+}
+
 function privateInstallScriptUrlLogged() {
   try {
     const u = new URL(COMMUNITY_PRIVATE_INSTALL_SCRIPT_URL);
@@ -1546,11 +1566,16 @@ app.post("/api/community/run-private-install", requireAuth, async (req, res) => 
       const dataAbs = path.resolve(DATA_DIR);
       const prelude = COMMUNITY_SKIP_REMOVE_FREE_BEFORE_PRIVATE_PRO
         ? "sleep 2"
-        : `sleep 3; docker rm -f ${freePanelName} ${freeLandingName} 2>/dev/null || true; docker rm -f ${staleProName} 2>/dev/null || true`;
+        : [
+            `sleep 3; docker rm -f ${freePanelName} ${freeLandingName} 2>/dev/null || true`,
+            `docker rm -f ${staleProName} 2>/dev/null || true`,
+            'for __amz_hp in $(docker ps -aq --filter name=amnezia-admin-pro 2>/dev/null || true); do docker rm -f "$__amz_hp" 2>/dev/null || true; done',
+          ].join(" ");
+      const fetchTools = dockerCliHelperEnsureFetchToolsScript();
       const sh = `
 set -eu
 ${prelude}
-cd /mnt/stage && exec bash ./install.sh >> /mnt/data/community-install-last.log 2>&1
+${fetchTools ? `${fetchTools}\n` : ""}cd /mnt/stage && exec bash ./install.sh >> /mnt/data/community-install-last.log 2>&1
 `.trim();
 
       const dr = spawn(
