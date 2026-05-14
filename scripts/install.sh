@@ -274,6 +274,7 @@ docker run -d --name "${CONTAINER_NAME}" --restart unless-stopped \
   -p "${HOST_PORT}:3980" \
   -v /var/run/docker.sock:/var/run/docker.sock \
   -v "${DATA_DIR}:/data" \
+  -e "HOST_DATA_DIR=${DATA_DIR}" \
   "${RUN_ENV[@]}" \
   amnezia-admin:latest
 

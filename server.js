@@ -1,5 +1,5 @@
 import express from "express";
-import { spawn } from "child_process";
+import { spawn, execFileSync } from "child_process";
 import crypto from "crypto";
 import path from "path";
 import fs from "fs";
@@ -146,6 +146,42 @@ if (!PROFILES.length) {
 const DATA_DIR = process.env.DATA_DIR || "/data";
 const PW_FILE = path.join(DATA_DIR, "password.hash");
 const SECRET_FILE = path.join(DATA_DIR, "session.secret");
+
+/**
+ * Хостовый путь, смонтированный в контейнер панели как DATA_DIR.
+ * Нужен для одноразового docker-cli helper-а: контейнер панели монтирует
+ * `${HOST_DATA_DIR}:/mnt/data`, и оба контейнера видят один и тот же файл логов.
+ * Порядок поиска:
+ *   1) env HOST_DATA_DIR (передаётся install.sh при `docker run`);
+ *   2) docker inspect собственного контейнера (находим Source для Destination=DATA_DIR);
+ *   3) fallback /opt/amnezia-admin-data — типичный путь install.sh.
+ */
+function resolveHostDataDir() {
+  const explicit = process.env.HOST_DATA_DIR?.trim();
+  if (explicit) return explicit;
+  const selfId = (process.env.HOSTNAME || "").trim();
+  if (selfId) {
+    try {
+      const out = execFileSync(
+        "docker",
+        [
+          "inspect",
+          "--format",
+          `{{range .Mounts}}{{if eq .Destination "${DATA_DIR}"}}{{.Source}}{{end}}{{end}}`,
+          selfId,
+        ],
+        { stdio: ["ignore", "pipe", "ignore"], timeout: 5000 },
+      )
+        .toString()
+        .trim();
+      if (out) return out;
+    } catch {
+      //
+    }
+  }
+  return "/opt/amnezia-admin-data";
+}
+const HOST_DATA_DIR = resolveHostDataDir();
 
 const SESSION_COOKIE = "amnezia_sess";
 const SESSION_MS = 7 * 24 * 60 * 60 * 1000;
@@ -1495,7 +1531,13 @@ app.post("/api/community/run-private-install", requireAuth, async (req, res) => 
       return res.status(400).json({ error: "Скачанный скрипт слишком большой — отказ." });
     }
 
-    tmpDir = fs.mkdtempSync(path.join("/tmp", "amnezia-priv-inst-"));
+    const stageRoot = path.join(DATA_DIR, ".priv-install-tmp");
+    try {
+      fs.mkdirSync(stageRoot, { recursive: true });
+    } catch {
+      //
+    }
+    tmpDir = fs.mkdtempSync(path.join(stageRoot, "amnezia-priv-inst-"));
     const scriptPath = path.join(tmpDir, "install.sh");
     fs.writeFileSync(scriptPath, buf);
     fs.chmodSync(scriptPath, 0o700);
@@ -1563,7 +1605,9 @@ app.post("/api/community/run-private-install", requireAuth, async (req, res) => 
     };
 
     if (useDockerCliHelper) {
-      const dataAbs = path.resolve(DATA_DIR);
+      const dataHost = HOST_DATA_DIR;
+      const relStage = path.relative(DATA_DIR, tmpDir);
+      const stageInHelper = `/mnt/data/${relStage}`;
       const prelude = COMMUNITY_SKIP_REMOVE_FREE_BEFORE_PRIVATE_PRO
         ? "sleep 2"
         : [
@@ -1577,11 +1621,13 @@ app.post("/api/community/run-private-install", requireAuth, async (req, res) => 
 exec >>"/mnt/data/community-install-last.log" 2>&1
 set -eu
 echo "→ helper (docker cli): prelude + bash/curl..."
+echo "  staging: ${stageInHelper} (host: ${tmpDir.replace(DATA_DIR, dataHost)})"
+[ -f "${stageInHelper}/install.sh" ] || { echo "⚠ helper: нет install.sh в ${stageInHelper} (проверьте монтирование ${dataHost}:/mnt/data)"; ls -la "${stageInHelper}" 2>&1 || true; exit 125; }
 ${prelude}
 ${fetchTools ? `${fetchTools}\n` : ""}command -v bash >/dev/null 2>&1 || { echo "⚠ helper: нет bash после apk/apt — см. ошибки apk выше"; exit 126; }
 command -v curl >/dev/null 2>&1 || { echo "⚠ helper: нет curl после apk/apt"; exit 126; }
 set +e
-( cd /mnt/stage && bash ./install.sh )
+( cd ${stageInHelper} && bash ./install.sh )
 rv=$?
 set -e
 echo ""
@@ -1598,9 +1644,7 @@ exit "\${rv}"
           "-v",
           "/var/run/docker.sock:/var/run/docker.sock",
           `-v`,
-          `${tmpDir}:/mnt/stage:ro`,
-          `-v`,
-          `${dataAbs}:/mnt/data`,
+          `${dataHost}:/mnt/data`,
           "-e",
           "GITHUB_TOKEN",
           "-e",
