@@ -443,12 +443,62 @@ fi
 }
 
 /**
+ * Пути `conf` / `clientsTable` внутри контейнера Amnezia: не всегда `awg0.conf`
+ * в `/opt/amnezia/awg/` (legacy — `wg0.conf`, второй сервис — подкаталог `awg2`).
+ */
+function probeAmneziaTunnelPaths(containerName) {
+  const safe = /^[a-zA-Z0-9_.-]+$/.test(containerName) ? containerName : "";
+  if (!safe) return null;
+  const script = `
+set -eu
+CONF=""
+for f in "/opt/amnezia/awg/awg0.conf" "/opt/amnezia/awg/wg0.conf" "/opt/amnezia/awg2/awg0.conf" "/opt/amnezia/awg2/wg0.conf" "/etc/wireguard/wg0.conf" "/etc/wireguard/awg0.conf"; do
+  if [ -f "$f" ]; then CONF="$f"; break; fi
+done
+if [ -z "$CONF" ]; then
+  CONF="$(find /opt/amnezia /etc/wireguard -maxdepth 10 \\( -name 'wg0.conf' -o -name 'awg0.conf' \\) 2>/dev/null | head -n 1)"
+fi
+[ -n "$CONF" ] && [ -f "$CONF" ] || exit 10
+DIR="$(dirname "$CONF")"
+CLIENTS=""
+for c in "$DIR/clientsTable" "/opt/amnezia/awg/clientsTable" "/opt/amnezia/awg2/clientsTable"; do
+  if [ -f "$c" ]; then CLIENTS="$c"; break; fi
+done
+[ -n "$CLIENTS" ] || exit 11
+PSK=""
+for p in "$DIR/wireguard_psk.key" "/opt/amnezia/awg/wireguard_psk.key"; do
+  if [ -f "$p" ]; then PSK="$p"; break; fi
+done
+printf '%s|%s|%s\\n' "$CONF" "$CLIENTS" "$PSK"
+`.trim();
+
+  try {
+    const out = execFileSync("docker", ["exec", containerName, "sh", "-c", script], {
+      stdio: ["ignore", "pipe", "ignore"],
+      encoding: "utf8",
+      timeout: 12000,
+    }).trimEnd();
+    const line = (out.split(/\r?\n/).find((l) => l.includes("|")) ?? "").trim();
+    const [confPath = "", clientsPath = "", pskPath = ""] = line.split("|").map((s) => s.trim());
+    if (!confPath || !clientsPath) return null;
+    return {
+      confPath,
+      clientsPath,
+      ...(pskPath ? { pskPath } : {}),
+    };
+  } catch {
+    return null;
+  }
+}
+
+/**
  * Авто-обнаружение профилей `amnezia-awg*` до старта PRO `install.sh`.
- * Возвращает JSON, готовый для `-e AWG_PROFILES=...` или пустую строку,
- * если найден ровно один контейнер (fallback panel-side тогда корректен).
+ * Возвращает JSON для `-e AWG_PROFILES=...` или пустую строку при сбое.
  *
- * Метки берём из публичных портов (`443/udp` → "AmneziaWG (443)"), порядок —
- * по возрастанию первого UDP-порта (если совпадает — по имени).
+ * Для каждого контейнера ищутся реальные `confPath`/`clientsTable` (не только дефолт `awg0.conf`).
+ *
+ * Если запущен ровно один `amnezia-awg*`, профиль один — переключатель в UI может не понадаться,
+ * но верные пути всё равно попадают в панель.
  */
 function autoDiscoverAwgProfilesJson() {
   if (envTruthy(process.env.COMMUNITY_DISABLE_AWG_PROFILES_AUTODETECT)) return "";
@@ -462,7 +512,7 @@ function autoDiscoverAwgProfilesJson() {
       .toString()
       .trim();
     const names = namesOut.split("\n").map((x) => x.trim()).filter(Boolean);
-    if (names.length < 2) return "";
+    if (names.length === 0) return "";
     const entries = names
       .map((name) => {
         let firstUdp = null;
@@ -493,9 +543,26 @@ function autoDiscoverAwgProfilesJson() {
           firstUdp: firstUdp ?? 1 << 30,
         };
       })
-      .sort((a, b) => a.firstUdp - b.firstUdp || a.container.localeCompare(b.container))
-      .map(({ id, label, container }) => ({ id, label, container }));
-    return JSON.stringify(entries);
+      .sort((a, b) => a.firstUdp - b.firstUdp || a.container.localeCompare(b.container));
+    const resolved = [];
+    for (const row of entries) {
+      const probed = probeAmneziaTunnelPaths(row.container);
+      if (!probed) {
+        console.warn(
+          `autoDiscover AWG: в контейнере ${row.container} не найдены conf/clientsTable — пропуск авто-AWG_PROFILES`,
+        );
+        return "";
+      }
+      resolved.push({
+        id: row.id,
+        label: row.label,
+        container: row.container,
+        confPath: probed.confPath,
+        clientsPath: probed.clientsPath,
+        ...(probed.pskPath ? { pskPath: probed.pskPath } : {}),
+      });
+    }
+    return JSON.stringify(resolved);
   } catch {
     return "";
   }
