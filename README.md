@@ -51,6 +51,15 @@ cd /opt/amnezia-admin && chmod +x scripts/install.sh && sudo SKIP_DOWNLOAD=1 bas
 
 Чтобы включить форму установки из панели, задайте в контейнере **`AMNEZIA_EDITION=community`** и **`ALLOW_COMMUNITY_GITHUB_ACTIVATION=1`** (`install.sh`: добавьте `-e ALLOW_COMMUNITY_GITHUB_ACTIVATION=1` или пересоздайте контейнер после правки переменных). URL приватного `install.sh` при необходимости переопределите через **`COMMUNITY_PRIVATE_INSTALL_SCRIPT_URL`**.
 
+**Важно:** при запуске `curl … | bash` переменная должна быть **экспортирована**, иначе её не увидит `install.sh`:
+
+```bash
+export ALLOW_COMMUNITY_GITHUB_ACTIVATION=1
+curl -fsSL https://raw.githubusercontent.com/andrey271192/amnezia_web/main/scripts/install.sh | sudo -E bash
+```
+
+(Под не-root добавьте `sudo`; `sudo -E` сохраняет экспортированные переменные.)
+
 Остальные переменные совместимы с образом панели (см. Dockerfile / `server.js` в этом репозитории).
 
 ---
