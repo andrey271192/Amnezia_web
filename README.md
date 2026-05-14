@@ -96,6 +96,10 @@ curl -fsSL https://raw.githubusercontent.com/andrey271192/amnezia_web/main/scrip
 
 Если на хосте уже что-то слушает **TCP 80**, установщик сообщит об этом и, при дефолтном **`LANDING_PORT=80`**, сам попробует другой свободный порт (обычно начиная с **8081**). Либо явно: **`LANDING_PORT=8083`**, либо **`SKIP_LANDING=1`**.
 
+### AmneziaWG Legacy: удаление клиента не срабатывает (`wg0.conf is world accessible` / `No such device`)
+
+Панель синхронизирует живой интерфейс через **`wg-quick strip` + `syncconf`**. У Legacy конфиг часто **`/opt/amnezia/awg/wg0.conf`**, интерфейс — **`wg0`**, не **`awg0`**. В актуальном коде интерфейс выводится из **имени файла** (**`wg0.conf` → `wg0`**). Если путь другой — задайте в профиле **`AWG_IFACE`** / в **`AWG_PROFILES`** поле **`iface`**. Предупреждение про world-accessible: перед применением конфига файл на стороне контейнера выставляется в **`chmod 600`**.
+
 ---
 
 ## Лицензия

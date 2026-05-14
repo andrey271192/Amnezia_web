@@ -707,11 +707,23 @@ function peerUsesWarp(peer, selectedSet) {
   return false;
 }
 
+/** Имя интерфейса для `awg|wg syncconf` и `… show`: при Legacy часто `/…/wg0.conf`, а в env остаётся дефолт `awg0`. */
+function resolveTunnelIface(profile) {
+  const cp = String(profile.confPath || "");
+  const m = cp.match(/\/([^/.]+)\.conf$/);
+  if (m) {
+    const stem = m[1];
+    const low = stem.toLowerCase();
+    if (low === "wg0" || low === "awg0") return stem;
+  }
+  return profile.iface;
+}
+
 function createRuntime(profile) {
   const container = profile.container;
   const confPath = profile.confPath;
   const clientsPath = profile.clientsPath;
-  const iface = profile.iface;
+  const iface = resolveTunnelIface(profile);
   const wgBinary = profile.wgBinary;
   const pskPath = profile.pskPath;
 
@@ -749,7 +761,9 @@ function createRuntime(profile) {
 
   async function applySyncconf() {
     await dockerExec(
-      `wg-quick strip '${confPath}' > /tmp/wg-admin-strip.conf && ${wgBinary} syncconf ${iface} /tmp/wg-admin-strip.conf`
+      `chmod 600 '${confPath}' 2>/dev/null || true` +
+        `; wg-quick strip '${confPath}' > /tmp/wg-admin-strip.conf` +
+        ` && ${wgBinary} syncconf ${iface} /tmp/wg-admin-strip.conf`
     );
   }
 
@@ -776,6 +790,7 @@ function createRuntime(profile) {
 
   return {
     profile,
+    tunnelIface: iface,
     dockerExec,
     dockerReadFile,
     dockerWriteFile,
@@ -1741,7 +1756,7 @@ app.get("/api/clients", requireAuth, async (req, res) => {
   try {
     let wgShow = "";
     try {
-      wgShow = await rt.dockerExec(`${rt.profile.wgBinary} show ${rt.profile.iface}`);
+      wgShow = await rt.dockerExec(`${rt.profile.wgBinary} show ${rt.tunnelIface}`);
     } catch {
       wgShow = "";
     }
