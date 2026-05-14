@@ -202,7 +202,7 @@ elif [[ -f "${INSTALL_DIR}/.amnezia-panel-edition" ]]; then
     echo "→ AMNEZIA_EDITION из ${INSTALL_DIR}/.amnezia-panel-edition: ${__PE}"
   fi
 fi
-for __ce_var in COMMUNITY_UPGRADE_URL COMMUNITY_UPGRADE_PITCH; do
+for __ce_var in COMMUNITY_UPGRADE_URL COMMUNITY_UPGRADE_PITCH ALLOW_COMMUNITY_GITHUB_ACTIVATION COMMUNITY_PRIVATE_INSTALL_SCRIPT_URL COMMUNITY_INSTALL_FETCH_MS PRIVATE_INSTALL_SCRIPT_MAX_BYTES; do
   if [[ -n "${!__ce_var:-}" ]]; then
     RUN_ENV+=( -e "${__ce_var}=${!__ce_var}" )
   fi
