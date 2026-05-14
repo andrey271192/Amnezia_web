@@ -77,7 +77,12 @@ mkdir -p "${DATA_DIR}"
 # При повторном запуске не менять внешний порт панели, если не указали HOST_PORT явно (по умолчанию 8080).
 PREV_HOST_PORT=""
 if docker inspect "${CONTAINER_NAME}" >/dev/null 2>&1; then
-  PREV_HOST_PORT="$(docker port "${CONTAINER_NAME}" 3980/tcp 2>/dev/null | head -1 | awk -F: '{print $NF}')"
+  # Контейнер может существовать, но быть остановлен: `docker port` тогда код ≠ 0 — при pipefail рвём весь скрипт без сообщения.
+  __dock_port_out=""
+  __dock_port_out="$(docker port "${CONTAINER_NAME}" 3980/tcp 2>/dev/null)" || :
+  if [[ -n "${__dock_port_out}" ]]; then
+    PREV_HOST_PORT="$(printf '%s\n' "${__dock_port_out}" | head -n1 | awk -F: '{print $NF}')" || PREV_HOST_PORT=""
+  fi
   if [[ -n "${PREV_HOST_PORT}" && "${HOST_PORT}" == "8080" ]]; then
     HOST_PORT="${PREV_HOST_PORT}"
     echo "→ Уже запущен ${CONTAINER_NAME}: сохраняю внешний порт ${HOST_PORT} (укажите HOST_PORT=… чтобы сменить)."
