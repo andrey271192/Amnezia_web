@@ -1,0 +1,241 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>AmneziaWG — просмотр клиентов</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;600;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body class="page">
+  <div id="login-gate" class="gate hidden" aria-hidden="true">
+    <div class="gate-card">
+      <p class="eyebrow">Панель сервера</p>
+      <h1>Вход</h1>
+      <p class="sub">Введите пароль администратора панели.</p>
+      <form id="login-form">
+        <label for="login-password">Пароль</label>
+        <input id="login-password" type="password" autocomplete="current-password" required>
+        <button type="submit" class="btn primary full">Войти</button>
+        <p id="login-error" class="status err" role="alert"></p>
+      </form>
+    </div>
+  </div>
+
+  <div id="app-root" class="shell hidden">
+    <header class="top">
+      <div>
+        <p class="eyebrow">Панель сервера</p>
+        <h1>Пользователи AmneziaWG</h1>
+        <p class="sub">Базовая открытая панель: просмотр клиентов и статусов туннеля. Управление peer, экспорт .conf, каскад, Cloudflare WARP и синхронизация времени хоста доступны в версии PRO (ссылка в жёлтой плашке после входа).</p>
+      </div>
+      <div class="token-box">
+        <div class="session-actions">
+          <button type="button" id="logout" class="btn ghost full">Выйти</button>
+        </div>
+        <details class="pw-change">
+          <summary>Сменить пароль</summary>
+          <form id="pw-form">
+            <label for="pw-current">Текущий пароль</label>
+            <input id="pw-current" type="password" autocomplete="current-password" required>
+            <label for="pw-new">Новый пароль</label>
+            <input id="pw-new" type="password" autocomplete="new-password" required minlength="8">
+            <label for="pw-new2">Повтор нового пароля</label>
+            <input id="pw-new2" type="password" autocomplete="new-password" required minlength="8">
+            <button type="submit" class="btn primary full">Сохранить новый пароль</button>
+            <p id="pw-msg" class="status" role="status"></p>
+          </form>
+        </details>
+      </div>
+    </header>
+
+    <div id="edition-banner" class="edition-banner hidden" role="region" aria-label="Редакция панели"></div>
+
+    <section class="toolbar">
+      <div class="pill proto-pill"><span class="dot ok"></span><span id="proto-label">Протокол: AmneziaWG</span></div>
+      <div id="proto-switch" class="proto-switch hidden">
+        <label for="proto-select" class="proto-switch-label muted">Инстанс</label>
+        <select id="proto-select" class="proto-select" aria-label="Инстанс AmneziaWG"></select>
+      </div>
+      <div class="clock-strip" role="status" aria-live="polite">
+        <div class="clock-row clock-row--server">
+          <span class="muted clock-kind">Сервер <span class="clock-kind-sub">(часы VPS / контейнера)</span></span>
+          <time id="clock-server" class="clock-time">—</time>
+        </div>
+        <div class="clock-row clock-row--your-place">
+          <span class="muted clock-kind">Ваше место <span class="clock-kind-sub">(браузер)</span></span>
+          <time id="clock-local" class="clock-time">—</time>
+        </div>
+        <p id="clock-zone-diff" class="clock-zone-diff muted hidden" role="note"></p>
+        <p class="clock-hint muted">
+          Цифры разнятся, если пояса разные — это нормально для одного момента UTC. «Сверить» подтягивает время с VPS.
+        </p>
+        <button type="button" id="clock-sync" class="btn small ghost clock-sync-btn">
+          Сверить время
+        </button>
+        <details class="clock-host-sync">
+          <summary class="clock-sync-summary">Синхронизация: выставить часы <strong>хоста VPS</strong> под <strong>ваше устройство</strong></summary>
+          <p id="sync-host-hint" class="muted clock-sync-hint"></p>
+          <label for="sync-root-pw">Пароль root на хосте (не сохраняется)</label>
+          <input id="sync-root-pw" type="password" autocomplete="off" class="clock-sync-input">
+          <button type="button" id="sync-host-time" class="btn small primary clock-sync-submit">
+            Взять время с этого устройства и записать на хост VPS
+          </button>
+        </details>
+      </div>
+      <button type="button" id="refresh" class="btn primary">Обновить</button>
+    </section>
+
+    <p id="profile-hint" class="profile-hint muted hidden" role="note"></p>
+
+    <p id="status" class="status" role="status"></p>
+
+    <details class="panel-fold warp-panel" id="warp-panel" hidden>
+      <summary class="fold-summary">
+        <span class="fold-arrow" aria-hidden="true"></span>
+        <span class="fold-titles">
+          <span class="fold-h">Cloudflare WARP</span>
+          <span class="muted fold-meta" id="warp-status-line"></span>
+        </span>
+      </summary>
+      <div class="panel-fold-body">
+        <p class="muted warp-intro">
+          <strong>Необязательно.</strong> Если достаточно обычного AmneziaWG без выхода части клиентов через Cloudflare — раздел можно не трогать (статус «Не установлен» — норма).
+          Если WARP нужен: выход в интернет через Cloudflare для <em>выбранных</em> клиентов (правила маршрутизации и NAT в контейнере).
+          Один раз на хосте VPS под root: в каталоге с репозиторием выполните <code class="inline">bash scripts/warp-amnezia.sh install</code>.
+          Затем отметьте клиентов ниже и нажмите «Применить» (контейнер AWG перезапустится). Установить или удалить WARP с хоста можно кнопками ниже (пароль root по SSH — как при синхронизации времени). Убрать вручную: <code class="inline">bash scripts/warp-amnezia.sh uninstall</code> — см. README.
+        </p>
+        <div id="warp-actions" class="warp-actions"></div>
+        <div id="warp-client-list" class="warp-client-list"></div>
+        <details class="raw warp-raw">
+          <summary>Вывод wg show warp</summary>
+          <pre id="warp-wg-show"></pre>
+        </details>
+      </div>
+    </details>
+
+    <details class="panel-fold cascade-panel" id="cascade-panel" open>
+      <summary class="fold-summary">
+        <span class="fold-arrow" aria-hidden="true"></span>
+        <span class="fold-titles">
+          <span class="fold-h">Новый клиент под каскад</span>
+          <span class="muted fold-meta">Создать peer и скачать .conf</span>
+        </span>
+      </summary>
+      <div class="panel-fold-body">
+        <p class="muted cascade-intro">
+          Укажите <strong>Endpoint</strong> — публичный IP или DNS узла, <em>куда клиент будет подключаться первым шагом</em>
+          (промежуточный сервер, домашний роутер с пробросом порта и т.д.). Порт по умолчанию совпадает с <code class="inline">ListenPort</code> этого инстанса.
+          Клиент будет <strong>создан на текущем сервере AmneziaWG</strong> (новые ключи); IP в туннеле можно задать явно или оставить пустым — подберём свободный в той же подсети, что у остальных.
+        </p>
+        <form id="cascade-form" class="cascade-form">
+          <label for="cascade-endpoint">Endpoint (хост для клиента)</label>
+          <input id="cascade-endpoint" type="text" placeholder="Например 203.0.113.50 или ddns.example.com" required autocomplete="off">
+
+          <label for="cascade-port">Порт Endpoint</label>
+          <input id="cascade-port" type="number" min="1" max="65535" placeholder="Пусто — как у сервера" autocomplete="off">
+
+          <label for="cascade-tunnel-ip">IP в VPN-туннеле (необязательно)</label>
+          <input id="cascade-tunnel-ip" type="text" placeholder="Например 10.8.1.20 — та же подсеть /24 что у других" autocomplete="off">
+
+          <label for="cascade-name">Имя в таблице</label>
+          <input id="cascade-name" type="text" placeholder="Например Телефон через узел X" autocomplete="off">
+
+          <button type="submit" class="btn primary">Создать на сервере и скачать .conf</button>
+        </form>
+      </div>
+    </details>
+
+    <details class="panel-fold" id="users-panel" open>
+      <summary class="fold-summary">
+        <span class="fold-arrow" aria-hidden="true"></span>
+        <span class="fold-titles">
+          <span class="fold-h">Пользователи</span>
+          <span class="muted fold-meta" id="peer-count"></span>
+        </span>
+      </summary>
+      <div class="panel-fold-body">
+        <div class="table-wrap">
+          <table class="clients-table">
+            <thead>
+              <tr>
+                <th>Имя</th>
+                <th>IP</th>
+                <th>Статус</th>
+                <th>Последнее отключение</th>
+                <th class="th-actions">Действия</th>
+              </tr>
+            </thead>
+            <tbody id="rows"></tbody>
+          </table>
+        </div>
+      </div>
+    </details>
+
+    <details class="raw panel-fold-raw" id="wg-raw-details">
+      <summary class="fold-summary fold-summary--raw">
+        <span class="fold-arrow" aria-hidden="true"></span>
+        <span class="fold-titles">
+          <span class="fold-h">Вывод awg show (отладка)</span>
+        </span>
+      </summary>
+      <pre id="wg-show"></pre>
+    </details>
+  </div>
+
+  <footer class="support-footer">
+    <div class="support-line">
+      <strong class="support-title">amnezia_web</strong>
+      <span class="support-sep" aria-hidden="true">·</span>
+      <a href="https://github.com/andrey271192/amnezia_web" target="_blank" rel="noopener noreferrer">⭐ GitHub</a>
+      <span class="support-sep" aria-hidden="true">·</span>
+      <a href="https://boosty.to/andrey27/donate" target="_blank" rel="noopener noreferrer">💖 Boosty</a>
+      <span class="support-sep" aria-hidden="true">·</span>
+      <a href="https://finance.ozon.ru/apps/sbp/ozonbankpay/019dc200-2a5d-7931-a619-782d285f6798" target="_blank" rel="noopener noreferrer">💳 Ozon&nbsp;СБП</a>
+      <span class="support-sep" aria-hidden="true">·</span>
+      <a href="https://t.me/lot_andrey" target="_blank" rel="noopener noreferrer">✉️ Telegram&nbsp;@lot_andrey</a>
+    </div>
+    <p class="support-blurb">
+      Открытая базовая сборка — только просмотр клиентов. Полная панель PRO (приватный репозиторий) и доступ по подписке — см. Boosty и плашку в интерфейсе после входа.
+    </p>
+  </footer>
+
+  <dialog id="disconnect-dt-dialog" class="dt-dialog">
+    <div class="dt-dialog-inner">
+      <h3 id="dt-dialog-title">Дата отключения</h3>
+      <p class="muted" id="dt-dialog-client"></p>
+      <label for="dt-dialog-input">Дата и время</label>
+      <input type="datetime-local" id="dt-dialog-input" step="60">
+      <div id="dt-dialog-extra" class="dt-dialog-extra hidden">
+        <p class="dt-dialog-hint" id="dt-dialog-hint"></p>
+        <label class="dt-checkbox-label">
+          <input type="checkbox" id="dt-dialog-schedule-tunnel">
+          Убрать из туннеля в указанное время (до этого клиент остаётся в туннеле)
+        </label>
+      </div>
+      <div class="dt-dialog-actions">
+        <button type="button" class="btn ghost" id="dt-dialog-cancel">Отмена</button>
+        <button type="button" class="btn primary" id="dt-dialog-ok">Подтвердить</button>
+      </div>
+    </div>
+  </dialog>
+
+  <dialog id="warp-ssh-dialog" class="dt-dialog">
+    <div class="dt-dialog-inner">
+      <h3 id="warp-ssh-title">WARP на хосте VPS</h3>
+      <p class="muted" id="warp-ssh-lead"></p>
+      <label for="warp-ssh-pw">Пароль root на хосте VPS (не сохраняется)</label>
+      <input id="warp-ssh-pw" type="password" autocomplete="off" class="clock-sync-input" />
+      <div class="dt-dialog-actions">
+        <button type="button" class="btn ghost" id="warp-ssh-cancel">Отмена</button>
+        <button type="button" class="btn primary" id="warp-ssh-ok">Выполнить</button>
+      </div>
+      <p id="warp-ssh-err" class="status err" role="alert"></p>
+    </div>
+  </dialog>
+
+  <script src="/app.js" type="module"></script>
+</body>
+</html>
