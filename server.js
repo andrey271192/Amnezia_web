@@ -52,12 +52,14 @@ const COMMUNITY_UPGRADE_URL =
   "https://boosty.to/andrey27/purchase/3906453?ssource=DIRECT&share=subscription_link";
 const COMMUNITY_UPGRADE_PITCH =
   process.env.COMMUNITY_UPGRADE_PITCH?.trim() ||
-  "В PRO: вкл/выкл клиентов, даты и расписание отключений, переименование, удаление, экспорт .conf, каскад, Cloudflare WARP, синхронизация времени хоста. Полная сборка — приватный репозиторий amnezia_web-PRO; доступ по подписке Boosty.";
+  "В PRO: вкл/выкл клиентов, даты и расписание отключений, переименование, экспорт .conf, каскад, Cloudflare WARP, синхронизация времени хоста. В FREE можно удалять клиента с сервера (peer и строка в таблице). Полная сборка — приватный репозиторий amnezia_web-PRO; доступ по подписке Boosty.";
 
 function editionPayload() {
   return {
     tier: IS_COMMUNITY ? "community" : "pro",
     readOnlyClients: IS_COMMUNITY,
+    /** В FREE разрешено удаление записи клиента (остальные мутации — PRO). */
+    allowDeleteClients: IS_COMMUNITY,
     upgradeUrl: IS_COMMUNITY ? COMMUNITY_UPGRADE_URL : null,
     upgradePitch: IS_COMMUNITY ? COMMUNITY_UPGRADE_PITCH : null,
     showDebugWg: !IS_COMMUNITY,
@@ -1388,7 +1390,7 @@ if (UI_HIDDEN.users || UI_HIDDEN.warp || UI_HIDDEN.cascade) {
   );
 }
 if (IS_COMMUNITY) {
-  console.warn(`Редакция community (только просмотр клиентов). PRO: ${COMMUNITY_UPGRADE_URL}`);
+  console.warn(`Редакция community (просмотр клиентов и удаление). Остальное — PRO: ${COMMUNITY_UPGRADE_URL}`);
 }
 if (ALLOW_COMMUNITY_GITHUB_ACTIVATION && IS_COMMUNITY) {
   console.warn(
@@ -2227,7 +2229,7 @@ app.post("/api/clients/rename", requireAuth, requireProTier, async (req, res) =>
   }
 });
 
-app.post("/api/clients/delete", requireAuth, requireProTier, async (req, res) => {
+app.post("/api/clients/delete", requireAuth, async (req, res) => {
   const rt = runtimeForRequest(req);
   const clientId = req.body?.clientId;
   if (!clientId) return res.status(400).json({ error: "clientId required" });

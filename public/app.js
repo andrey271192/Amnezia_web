@@ -63,10 +63,11 @@ let uiHidden = { users: false, warp: false, cascade: false };
 const editionBanner = document.querySelector("#edition-banner");
 const DEFAULT_HEADER_SUB = document.querySelector(".top .sub")?.textContent?.trim() || "";
 
-/** Состояние редакции панели (community = только просмотр клиентов). */
+/** Состояние редакции панели (community = просмотр + удаление; остальные мутации — PRO). */
 let editionState = {
   tier: "pro",
   readOnlyClients: false,
+  allowDeleteClients: false,
   upgradeUrl: null,
   upgradePitch: null,
   showDebugWg: true,
@@ -79,6 +80,7 @@ function applyEditionPayload(data) {
   editionState = {
     tier: ed.tier === "community" ? "community" : "pro",
     readOnlyClients: Boolean(ed.readOnlyClients),
+    allowDeleteClients: Boolean(ed.allowDeleteClients),
     upgradeUrl: typeof ed.upgradeUrl === "string" ? ed.upgradeUrl : null,
     upgradePitch: typeof ed.upgradePitch === "string" ? ed.upgradePitch : null,
     showDebugWg: ed.showDebugWg !== false,
@@ -95,7 +97,7 @@ function applyEditionPayload(data) {
   if (subEl) {
     if (editionState.tier === "community") {
       subEl.textContent =
-        "Базовая панель amnezia_web: только просмотр клиентов AmneziaWG и статусов. Управление туннелем, экспорт .conf, каскад, Cloudflare WARP и синхронизация времени хоста — в версии PRO.";
+        "Базовая панель amnezia_web: просмотр клиентов и статусов, а также удаление клиента с сервера. Включение/выключение туннеля, даты, переименование, экспорт .conf, каскад, Cloudflare WARP и синхронизация времени хоста — в версии PRO.";
     } else {
       subEl.textContent = DEFAULT_HEADER_SUB;
     }
@@ -109,7 +111,7 @@ function applyEditionPayload(data) {
       const textCol = document.createElement("div");
       textCol.className = "edition-banner-text";
       const strong = document.createElement("strong");
-      strong.textContent = "Базовая версия · только просмотр";
+      strong.textContent = "Базовая версия · просмотр и удаление клиентов";
       const pitch = document.createElement("p");
       pitch.className = "edition-banner-pitch muted";
       pitch.textContent = editionState.upgradePitch || "";
@@ -823,10 +825,20 @@ function renderRows(clients) {
     actTd.className = "actions";
 
     if (editionState.readOnlyClients) {
-      const lock = document.createElement("span");
-      lock.className = "muted";
-      lock.textContent = "Только PRO";
-      actTd.appendChild(lock);
+      if (editionState.allowDeleteClients) {
+        const note = document.createElement("div");
+        note.className = "muted";
+        note.style.fontSize = "0.85rem";
+        note.style.marginBottom = "0.35rem";
+        note.textContent = "Вкл/выкл, даты, переименование, экспорт — PRO";
+        actTd.appendChild(note);
+        actTd.appendChild(btn("Удалить", "btn small warn", () => confirmDelete(c.name, c.clientId)));
+      } else {
+        const lock = document.createElement("span");
+        lock.className = "muted";
+        lock.textContent = "Только PRO";
+        actTd.appendChild(lock);
+      }
     } else {
       if (c.activeInConf) {
         actTd.appendChild(btn("Выключить", "btn small ghost", () => openDisableDialog(c)));
