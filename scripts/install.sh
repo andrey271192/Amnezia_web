@@ -42,7 +42,7 @@ trap cleanup EXIT
 
 if [[ "${SKIP_DOWNLOAD:-}" != "1" ]]; then
   echo "→ Клонирование релиза ${GITHUB_REPO} (${BRANCH})..."
-  echo "→ Скачивание tar.gz с GitHub (вывода может не быть 1–10 мин.; при блокировках задайте зеркало GITHUB_REPO_URL или см. CURL_MAX_TIME ниже)."
+  echo "→ Скачивание tar.gz с GitHub (вывода может не быть 1–10 мин.; при блокировках задайте зеркало GITHUB_REPO_URL_OVERRIDE или см. CURL_MAX_TIME ниже)."
   TMP=$(mktemp -d)
   CURL_OPTS=(
     -fsSL
@@ -128,7 +128,9 @@ if [[ -z "${AWG_PROFILES:-}" ]] && [[ -f "${AWG_PROFILE_SNAPSHOT}" ]]; then
 fi
 
 if [[ -z "${AWG_PROFILES:-}" ]]; then
-  __awg_multi_count="$(docker ps --format '{{.Names}}' 2>/dev/null | grep -E '^amnezia-awg' | wc -l | tr -d '[:space:]')"
+  __awg_multi_count="$(
+    docker ps --format '{{.Names}}' 2>/dev/null | awk '/^amnezia-awg/ { c++ } END { print c + 0 }' | tr -d '[:space:]'
+  )"
   if [[ "${__awg_multi_count:-0}" =~ ^[0-9]+$ ]] && [[ "${__awg_multi_count}" -gt 1 ]]; then
     echo "⚠ Запущено ${__awg_multi_count} контейнеров с именами amnezia-awg*, но AWG_PROFILES не задан."
     echo "  Переключатель «Инстанс» в панели не появится: см. README, раздел «Несколько инстансов» и «Переменные окружения и sudo»."
