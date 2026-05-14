@@ -48,6 +48,10 @@ cd /opt/amnezia-admin && chmod +x scripts/install.sh && sudo SKIP_DOWNLOAD=1 bas
 | `COMMUNITY_PRIVATE_INSTALL_SCRIPT_URL` | `https://raw.githubusercontent.com/andrey271192/amnezia_web-pro/main/scripts/install.sh` | Сырой URL `scripts/install.sh` в **вашем** приватном репозитории PRO |
 | `COMMUNITY_INSTALL_FETCH_MS` | `60000` | Таймаут HTTP при скачивании установщика из GitHub |
 | `PRIVATE_INSTALL_SCRIPT_MAX_BYTES` | `2097152` | Максимальный размер скачанного скрипта (байты) |
+| `COMMUNITY_DISABLE_DOCKER_CLI_HELPER` | _(не задано)_ | Если `1`, установка из UI снова только «bash внутри панели» (часто конфликт **:8080** с PRO). По умолчанию используется одноразовый контейнер **docker:cli**, который **снимает FREE** и зависший PRO перед `install.sh`. |
+| `COMMUNITY_SKIP_REMOVE_FREE_BEFORE_PRIVATE_PRO` | `0` | `1` — не выполнять `docker rm` FREE/лендинга перед install (если знаете, что делаете). |
+| `COMMUNITY_PRO_INSTALL_HELPER_IMAGE` | `docker:26-cli` | Образ с бинарём `docker` для фонового контейнера (нужен доступ к демону по сокету). |
+| `FREE_PANEL_CONTAINER_FOR_PRO_INSTALL` и др. | см. `server.js` | Имена контейнеров для `docker rm` перед install (по умолчанию `amnezia-admin`, `amnezia-web-landing`, `amnezia-admin-pro`). |
 
 Чтобы включить форму установки из панели, задайте в контейнере **`AMNEZIA_EDITION=community`** и **`ALLOW_COMMUNITY_GITHUB_ACTIVATION=1`** (`install.sh`: добавьте `-e ALLOW_COMMUNITY_GITHUB_ACTIVATION=1` или пересоздайте контейнер после правки переменных). URL приватного `install.sh` при необходимости переопределите через **`COMMUNITY_PRIVATE_INSTALL_SCRIPT_URL`**.
 
@@ -90,7 +94,7 @@ curl -fsSL https://raw.githubusercontent.com/andrey271192/amnezia_web/main/scrip
 
 ### `Bind for 0.0.0.0:8080 failed: port is already allocated` у `amnezia-admin-pro`
 
-На **8080** уже слушает **FREE**‑панель (**`amnezia-admin`**). Перед запуском образа PRO (**`docker compose`**, **`amnezia-web-pro-deploy`**, свой скрипт): **`docker rm -f amnezia-admin`**, затем снова **`up`**. Два контейнера панели на один и тот же порт не поднять.
+На **8080** уже слушает **FREE**‑панель (**`amnezia-admin`**). Пока она работает, второй контейнер панели (PRO) на тот же порт не поднимется. **Кнопка «Установить PRO» из UI по умолчанию** использует одноразовый контейнер **`docker:cli`** (пауза → **`docker rm`** FREE / лендинг / возможный **`amnezia-admin-pro` в Created** → затем ваш **`install.sh`**). Иначе вручную: **`docker rm -f amnezia-admin`**, затем установщик PRO. Отключить авто-снос: **`COMMUNITY_DISABLE_DOCKER_CLI_HELPER=1`**.
 
 ### Лендинг: порт 80 занят
 

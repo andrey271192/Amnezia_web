@@ -47,6 +47,10 @@ const COMMUNITY_PRIVATE_INSTALL_SCRIPT_URL =
 const PRIVATE_INSTALL_SCRIPT_MAX_BYTES = Number(process.env.PRIVATE_INSTALL_SCRIPT_MAX_BYTES || 2_097_152) || 2_097_152;
 /** Флаг выполнения одноразового bash install из UI (держим второй параллельный запрос). */
 let communityPrivateInstallBusy = false;
+const COMMUNITY_SKIP_REMOVE_FREE_BEFORE_PRIVATE_PRO = envTruthy(
+  process.env.COMMUNITY_SKIP_REMOVE_FREE_BEFORE_PRIVATE_PRO,
+);
+const COMMUNITY_DISABLE_DOCKER_CLI_HELPER = envTruthy(process.env.COMMUNITY_DISABLE_DOCKER_CLI_HELPER);
 const COMMUNITY_UPGRADE_URL =
   process.env.COMMUNITY_UPGRADE_URL?.trim() ||
   "https://boosty.to/andrey27/purchase/3906453?ssource=DIRECT&share=subscription_link";
@@ -365,6 +369,13 @@ function validateGithubBearerToken(tok) {
   const s = tok.trim();
   if (s.length < 20 || s.length > 4096) return false;
   return /^[!-~]+$/.test(s);
+}
+
+/** Имя контейнера для встраивания в `sh -lc` во внешнем helper (docker rm -f …). */
+function shellSafeDockerContainerName(raw, fallback) {
+  const s = typeof raw === "string" ? raw.trim() : "";
+  if (/^[a-zA-Z][a-zA-Z0-9_.-]{0,127}$/.test(s)) return s;
+  return fallback;
 }
 
 function privateInstallScriptUrlLogged() {
@@ -1474,21 +1485,35 @@ app.post("/api/community/run-private-install", requireAuth, async (req, res) => 
     const header = `\n${"=".repeat(60)}\n${new Date().toISOString()} — старт install из UI (COMMUNITY)\nURL: ${COMMUNITY_PRIVATE_INSTALL_SCRIPT_URL}\n${"=".repeat(60)}\n`;
     fs.appendFileSync(logAbs, header);
 
-    const logStream = fs.createWriteStream(logAbs, { flags: "a" });
+    const useDockerCliHelper = !COMMUNITY_DISABLE_DOCKER_CLI_HELPER;
+    const helperImage =
+      process.env.COMMUNITY_PRO_INSTALL_HELPER_IMAGE?.trim() || "docker:26-cli";
+    const freePanelName = shellSafeDockerContainerName(
+      process.env.FREE_PANEL_CONTAINER_FOR_PRO_INSTALL,
+      "amnezia-admin",
+    );
+    const freeLandingName = shellSafeDockerContainerName(
+      process.env.FREE_LANDING_CONTAINER_FOR_PRO_INSTALL,
+      "amnezia-web-landing",
+    );
+    const staleProName = shellSafeDockerContainerName(
+      process.env.STALE_PRO_PANEL_CONTAINER_FOR_PRO_INSTALL,
+      "amnezia-admin-pro",
+    );
 
-    const child = spawn("bash", [scriptPath], {
-      cwd: tmpDir,
-      env: {
-        ...process.env,
-        GITHUB_TOKEN: token,
-        GH_TOKEN: token,
-        GIT_TERMINAL_PROMPT: "0",
-      },
-      stdio: ["ignore", "pipe", "pipe"],
-    });
+    if (useDockerCliHelper) {
+      fs.appendFileSync(
+        logAbs,
+        `\n→ Одноразовый установщик: ${helperImage}; FREE=${freePanelName}, лендинг=${freeLandingName}, удаление зависшего PRO=${staleProName}. Отключить слой: COMMUNITY_DISABLE_DOCKER_CLI_HELPER=1\n`,
+      );
+    } else {
+      fs.appendFileSync(
+        logAbs,
+        "\n→ COMMUNITY_DISABLE_DOCKER_CLI_HELPER=1 — install идёт в том же контейнере; FREE не удаляется до скрипта (частый конфликт :8080 с PRO).\n",
+      );
+    }
 
-    child.stdout.pipe(logStream, { end: false });
-    child.stderr.pipe(logStream, { end: false });
+    const logStream = useDockerCliHelper ? null : fs.createWriteStream(logAbs, { flags: "a" });
 
     let finalized = false;
     const finalize = (code = null, signal = null, errText = "") => {
@@ -1503,26 +1528,88 @@ app.post("/api/community/run-private-install", requireAuth, async (req, res) => 
       } catch {
         //
       }
-      logStream.end(() => {
+      const rmTmp = () => {
         try {
           fs.rmSync(tmpDir, { recursive: true, force: true });
         } catch {
           //
         }
-      });
+      };
+      if (logStream) {
+        logStream.end(() => rmTmp());
+      } else {
+        rmTmp();
+      }
     };
 
-    child.once("exit", (code, signal) => finalize(code, signal));
-    child.once("error", (err) => {
-      console.warn("community-private-install bash:", err?.message || err);
-      finalize(null, null, String(err.message || err));
-    });
+    if (useDockerCliHelper) {
+      const dataAbs = path.resolve(DATA_DIR);
+      const prelude = COMMUNITY_SKIP_REMOVE_FREE_BEFORE_PRIVATE_PRO
+        ? "sleep 2"
+        : `sleep 3; docker rm -f ${freePanelName} ${freeLandingName} 2>/dev/null || true; docker rm -f ${staleProName} 2>/dev/null || true`;
+      const sh = `
+set -eu
+${prelude}
+cd /mnt/stage && exec bash ./install.sh >> /mnt/data/community-install-last.log 2>&1
+`.trim();
+
+      const dr = spawn(
+        "docker",
+        [
+          "run",
+          "--rm",
+          "--pull=missing",
+          "-v",
+          "/var/run/docker.sock:/var/run/docker.sock",
+          `-v`,
+          `${tmpDir}:/mnt/stage:ro`,
+          `-v`,
+          `${dataAbs}:/mnt/data`,
+          "-e",
+          `GITHUB_TOKEN=${token}`,
+          "-e",
+          `GH_TOKEN=${token}`,
+          "-e",
+          "GIT_TERMINAL_PROMPT=0",
+          helperImage,
+          "sh",
+          "-lc",
+          sh,
+        ],
+        { detached: true, stdio: "ignore" },
+      );
+      dr.unref();
+      dr.once("exit", (code, signal) => finalize(code, signal));
+      dr.once("error", (err) => {
+        console.warn("community-private-install docker-cli helper:", err?.message || err);
+        finalize(null, null, String(err.message || err));
+      });
+    } else {
+      const child = spawn("bash", [scriptPath], {
+        cwd: tmpDir,
+        env: {
+          ...process.env,
+          GITHUB_TOKEN: token,
+          GH_TOKEN: token,
+          GIT_TERMINAL_PROMPT: "0",
+        },
+        stdio: ["ignore", "pipe", "pipe"],
+      });
+      child.stdout.pipe(logStream, { end: false });
+      child.stderr.pipe(logStream, { end: false });
+      child.once("exit", (code, signal) => finalize(code, signal));
+      child.once("error", (err) => {
+        console.warn("community-private-install bash:", err?.message || err);
+        finalize(null, null, String(err.message || err));
+      });
+    }
 
     res.status(202).json({
       ok: true,
       queued: true,
-      message:
-        "Установка PRO запущена. Панель может прерваться — через 2–5 минут откройте её снова по тому же адресу. Журнал пишется в /data/community-install-last.log в том контейнере, где была FREE-панель (до возможной замены образа).",
+      message: useDockerCliHelper
+        ? "Установка PRO: отдельный контейнер сначала снимает FREE (освобождается порт панели) и зависший PRO при наличии, затем выполняется install.sh. Подождите 3–10 мин и откройте адрес снова. Журнал: на VPS каталог данных панели (часто /opt/amnezia-admin-data/community-install-last.log)."
+        : "Режим без docker-helper: при «port already allocated» снимите FREE вручную. Журнал: /data/community-install-last.log.",
       logInsideContainer: "community-install-last.log",
     });
   } catch (e) {
