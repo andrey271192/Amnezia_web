@@ -77,6 +77,8 @@ curl -fsSL https://raw.githubusercontent.com/andrey271192/amnezia_web/main/scrip
 curl -fsSL https://raw.githubusercontent.com/andrey271192/amnezia_web/main/scripts/install.sh | sudo bash
 ```
 
+После сообщения **`→ Клонирование релиза …`** несколько минут **может ничего не печататься**: идёт `curl … | tar` с GitHub. Для **полосы прогресса**: `sudo INSTALL_SCRIPT_VERBOSE=1 bash` (или передайте переменную в окружение до `|`). Если обрывает по времени или «тишина» часами задайте таймауты: **`CURL_CONNECT_TIMEOUT`** (по умолчанию 30 с к подключению), **`CURL_MAX_TIME`** (по умолчанию до 900 с на загрузку), **`CURL_RETRY`**. Полный URL tar.gz можно подменить: **`GITHUB_REPO_URL_OVERRIDE`** (должен указывать на архив того же вида **`${REPO}-${BRANCH}.tar.gz`**, после распаковки каталог будет **`ИмяРепозитория-${BRANCH}`**).
+
 Принудительная пересборка образа: **`NO_CACHE=1`**.
 
 ---
@@ -104,6 +106,10 @@ curl -fsSL https://raw.githubusercontent.com/andrey271192/amnezia_web/main/scrip
 ### В `community-install-last.log`: **`curl: command not found`** и затем **`tar: invalid magic`**
 
 Образ **`docker:26-cli`** на Alpine часто **без `curl`**; ваш приватный `install.sh`, скачивающий архив через `curl … | tar`, падает, а **`tar`** читает пустые данные («invalid magic»). Актуальная панель **перед запуском** `install.sh` в helper ставит **`curl`** через **`apk`** / **`apt-get`**. Если сетевая политика блокирует `apk add`/`apt-get`, укажите другой образ в **`COMMUNITY_PRO_INSTALL_HELPER_IMAGE`** (со встроенным `curl`), либо замените `curl` в своём **`install.sh`** на **`wget`**. Отключить авто-доставку `curl`: **`COMMUNITY_HELPER_SKIP_PREPARE_TOOLS=1`** (обычно не нужно).
+
+### Установка «зависла» на сообщении **`→ Клонирование релиза …`** и долго без вывода
+
+Это этап **скачивания и распаковки** архива с GitHub. Запустите установщик с **`INSTALL_SCRIPT_VERBOSE=1`** (полоска загрузки `curl`). Задайте **`CURL_MAX_TIME`** если нужно усечь ожидание. При блокировках GitHub с хоста — зеркальный полный URL в **`GITHUB_REPO_URL_OVERRIDE`** (см. раздел «Обновление»).
 
 ### Лендинг: порт 80 занят
 

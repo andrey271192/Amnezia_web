@@ -42,16 +42,34 @@ trap cleanup EXIT
 
 if [[ "${SKIP_DOWNLOAD:-}" != "1" ]]; then
   echo "→ Клонирование релиза ${GITHUB_REPO} (${BRANCH})..."
+  echo "→ Скачивание tar.gz с GitHub (вывода может не быть 1–10 мин.; при блокировках задайте зеркало GITHUB_REPO_URL или см. CURL_MAX_TIME ниже)."
   TMP=$(mktemp -d)
-  curl -fsSL \
-    -H 'Cache-Control: no-cache' \
-    -H 'Pragma: no-cache' \
-    "https://github.com/${GITHUB_REPO}/archive/refs/heads/${BRANCH}.tar.gz" \
-    | tar xz -C "${TMP}"
+  CURL_OPTS=(
+    -fsSL
+    -H 'Cache-Control: no-cache'
+    -H 'Pragma: no-cache'
+    --connect-timeout "${CURL_CONNECT_TIMEOUT:-30}"
+    --max-time "${CURL_MAX_TIME:-900}"
+    --retry "${CURL_RETRY:-2}"
+    --retry-delay "${CURL_RETRY_DELAY:-5}"
+    --retry-connrefused
+  )
+  if [[ "${INSTALL_SCRIPT_VERBOSE:-}" == "1" ]]; then CURL_OPTS+=(--progress-bar); fi
+  CURL_URL="${GITHUB_REPO_URL_OVERRIDE:-}"
+  if [[ -z "${CURL_URL}" ]]; then
+    CURL_URL="https://github.com/${GITHUB_REPO}/archive/refs/heads/${BRANCH}.tar.gz"
+  fi
+  if ! curl "${CURL_OPTS[@]}" "${CURL_URL}" | tar xz -C "${TMP}"; then
+    echo "Ошибка: не удалось скачать или распаковать архив (${CURL_URL})."
+    echo "Подсказка: проверьте ping/curl до github.com, при необходимости export GITHUB_REPO_URL_OVERRIDE='…' или INSTALL_SCRIPT_VERBOSE=1."
+    exit 1
+  fi
+  echo "→ Перенос распакованного дерева в ${INSTALL_DIR}…"
   rm -rf "${INSTALL_DIR}"
   mkdir -p "$(dirname "${INSTALL_DIR}")"
   mv "${TMP}/${REPO_SLUG}-${BRANCH}" "${INSTALL_DIR}"
   TMP=""
+  echo "→ Источники на месте."
 fi
 
 mkdir -p "${DATA_DIR}"
