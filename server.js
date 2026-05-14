@@ -379,20 +379,20 @@ function shellSafeDockerContainerName(raw, fallback) {
 }
 
 /**
- * Одноразовый helper (`docker:*-cli`) часто Alpine без curl, а частный PRO install.sh дергает `curl`/GitHub —
- * см. сообщество: `curl: command not found`, затем tar «invalid magic».
- * Установить curl/ca-cert перед `bash ./install.sh`. Отключить: COMMUNITY_HELPER_SKIP_PREPARE_TOOLS=1.
+ * Одноразовый helper (`docker:*-cli`) почти всегда Alpine: нет **`bash`** (#!/usr/bin/env bash у install.sh) и **`curl`**.
+ * Без них `exec bash ./install.sh` падает сразу (~код 2 и пустое продолжение лога после строки про helper).
+ * Отключить: COMMUNITY_HELPER_SKIP_PREPARE_TOOLS=1 (если свой образ уже с bash+curl или меняете shebang скрипта PRO).
  */
 function dockerCliHelperEnsureFetchToolsScript() {
   if (envTruthy(process.env.COMMUNITY_HELPER_SKIP_PREPARE_TOOLS)) return "";
   return `
-# Инструменты для приватного install.sh (образ Docker CLI может быть без curl)
-if ! command -v curl >/dev/null 2>&1; then
+# bash + curl для приватного install.sh (#!/usr/bin/env bash у большинства install.sh из репозиториев GitHub).
+if ! command -v bash >/dev/null 2>&1 || ! command -v curl >/dev/null 2>&1; then
   if command -v apk >/dev/null 2>&1; then
-    apk add --no-cache curl ca-certificates || echo "⚠ helper: apk add curl failed — приватный install.sh может упасть" >> /mnt/data/community-install-last.log
+    apk add --no-cache bash curl ca-certificates || echo "⚠ helper: apk add bash/curl failed — install.sh может не запуститься" >> /mnt/data/community-install-last.log
   elif command -v apt-get >/dev/null 2>&1; then
     export DEBIAN_FRONTEND=noninteractive
-    apt-get update -qq >/dev/null && apt-get install -y -qq curl ca-certificates || echo "⚠ helper: apt install curl failed — приватный install.sh может упасть" >> /mnt/data/community-install-last.log
+    apt-get update -qq >/dev/null && apt-get install -y -qq bash curl ca-certificates || echo "⚠ helper: apt bash/curl failed — install.sh может не запуститься" >> /mnt/data/community-install-last.log
   fi
 fi
 `.trim();

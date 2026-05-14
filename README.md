@@ -74,7 +74,7 @@ cd /opt/amnezia-admin && chmod +x scripts/install.sh && sudo SKIP_DOWNLOAD=1 bas
 | `COMMUNITY_DISABLE_DOCKER_CLI_HELPER` | _(не задано)_ | Если `1`, установка из UI снова только «bash внутри панели» (часто конфликт **:8080** с PRO). По умолчанию используется одноразовый контейнер **docker:cli**, который **снимает FREE** и зависший PRO перед `install.sh`. |
 | `COMMUNITY_SKIP_REMOVE_FREE_BEFORE_PRIVATE_PRO` | `0` | `1` — не выполнять `docker rm` FREE/лендинга перед install (если знаете, что делаете). |
 | `COMMUNITY_PRO_INSTALL_HELPER_IMAGE` | `docker:26-cli` | Образ с бинарём `docker` для фонового контейнера (нужен доступ к демону по сокету). |
-| `COMMUNITY_HELPER_SKIP_PREPARE_TOOLS` | _(не задано)_ | `1` — не ставить `curl` перед приватным `install.sh` в helper (обычно не нужно; образ Alpine часто без `curl`, без него ваш скрипт падает). |
+| `COMMUNITY_HELPER_SKIP_PREPARE_TOOLS` | _(не задано)_ | `1` — helper не ставит **`bash`** и **`curl`** в образе Alpine (обычно **не нужно**; без них `#!/usr/bin/env bash` или `curl` в PRO `install.sh` падают). |
 | `FREE_PANEL_CONTAINER_FOR_PRO_INSTALL` и др. | см. `server.js` | Имена контейнеров для `docker rm` перед install (по умолчанию `amnezia-admin`, `amnezia-web-landing`, `amnezia-admin-pro`). |
 
 Чтобы включить форму установки из панели после «обычной» установки без **`INSTALL_FREE…`**, задайте в контейнере **`AMNEZIA_EDITION=community`** и **`ALLOW_COMMUNITY_GITHUB_ACTIVATION=1`** (или проще переустановите с **`INSTALL_FREE_COMMUNITY_ACTIVATION=1`**). URL приватного `install.sh` при необходимости переопределите через **`COMMUNITY_PRIVATE_INSTALL_SCRIPT_URL`**.
@@ -121,9 +121,9 @@ curl -fsSL https://raw.githubusercontent.com/andrey271192/amnezia_web/main/scrip
 
 На **8080** уже слушает **FREE**‑панель (**`amnezia-admin`**). Пока она работает, второй контейнер панели (PRO) на тот же порт не поднимется. **Кнопка «Установить PRO» из UI по умолчанию** использует одноразовый контейнер **`docker:cli`** (пауза → **`docker rm`** FREE / лендинг / **`amnezia-admin-pro` и любые имена вида `_…_…-amnezia-admin-pro`** из docker compose → затем ваш **`install.sh`**). Иначе вручную: **`docker rm -f amnezia-admin`**, затем установщик PRO. Отключить авто-снос: **`COMMUNITY_DISABLE_DOCKER_CLI_HELPER=1`**.
 
-### В `community-install-last.log`: **`curl: command not found`** и затем **`tar: invalid magic`**
+### В `community-install-last.log`: **`curl: command not found`**, **`tar: invalid magic`**, **`code=2` сразу после helper
 
-Образ **`docker:26-cli`** на Alpine часто **без `curl`**; ваш приватный `install.sh`, скачивающий архив через `curl … | tar`, падает, а **`tar`** читает пустые данные («invalid magic»). Актуальная панель **перед запуском** `install.sh` в helper ставит **`curl`** через **`apk`** / **`apt-get`**. Если сетевая политика блокирует `apk add`/`apt-get`, укажите другой образ в **`COMMUNITY_PRO_INSTALL_HELPER_IMAGE`** (со встроенным `curl`), либо замените `curl` в своём **`install.sh`** на **`wget`**. Отключить авто-доставку `curl`: **`COMMUNITY_HELPER_SKIP_PREPARE_TOOLS=1`** (обычно не нужно).
+Образ **`docker:26-cli`** на Alpine обычно **без `bash` и без `curl`**. PRO `install.sh` с **`#!/usr/bin/env bash`** и загрузкой архива через **`curl | tar`** без них не стартуют (**`curl: command not found`**, **`tar: invalid magic`**). Если helper успевает записать строку про «одноразовый установщик», а дальше сразу **`--- завершено … code=2 ---`** через ~секунду — чаще всего **не нашли `bash`** (или **`apk`** не смог ставить пакеты — сеть/политики). В актуальном коде helper перед `install.sh` ставит **`bash`/`curl`/ca-cert**. Если **`apk`/`apt-get`** с хоста недоступны из контейнера — свой образ в **`COMMUNITY_PRO_INSTALL_HELPER_IMAGE`** (со **`bash`** и **`curl`**), другой сетап в PRO-скрипте (`wget`, **`#!/bin/sh`**). Отключить подготовку: **`COMMUNITY_HELPER_SKIP_PREPARE_TOOLS=1`**.
 
 ### Установка «зависла» на сообщении **`→ Клонирование релиза …`** и долго без вывода
 
