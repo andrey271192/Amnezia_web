@@ -415,20 +415,28 @@ function shellSafeDockerContainerName(raw, fallback) {
 }
 
 /**
- * Одноразовый helper (`docker:*-cli`) почти всегда Alpine: нет **`bash`** (#!/usr/bin/env bash у install.sh) и **`curl`**.
- * Без них `exec bash ./install.sh` падает сразу (~код 2 и пустое продолжение лога после строки про helper).
- * Отключить: COMMUNITY_HELPER_SKIP_PREPARE_TOOLS=1 (если свой образ уже с bash+curl или меняете shebang скрипта PRO).
+ * Одноразовый helper (`docker:*-cli`) почти всегда Alpine: нет **`bash`** (#!/usr/bin/env bash у install.sh), **`curl`**, **`openssl`** и **`tar`**.
+ * Без них `exec bash ./install.sh` падает сразу (~код 2/127 и пустое продолжение лога после строки про helper).
+ * Отключить: COMMUNITY_HELPER_SKIP_PREPARE_TOOLS=1 (если свой образ уже со всем необходимым).
  */
 function dockerCliHelperEnsureFetchToolsScript() {
   if (envTruthy(process.env.COMMUNITY_HELPER_SKIP_PREPARE_TOOLS)) return "";
   return `
-# bash + curl для приватного install.sh (#!/usr/bin/env bash у большинства install.sh из репозиториев GitHub).
-if ! command -v bash >/dev/null 2>&1 || ! command -v curl >/dev/null 2>&1; then
+# bash + curl + openssl + tar для приватного install.sh:
+#   - bash: shebang #!/usr/bin/env bash
+#   - curl: скачивание tar.gz релиза с GitHub
+#   - openssl: генерация первичного пароля/секретов
+#   - tar:    распаковка tar.gz
+if ! command -v bash >/dev/null 2>&1 || ! command -v curl >/dev/null 2>&1 \\
+   || ! command -v openssl >/dev/null 2>&1 || ! command -v tar >/dev/null 2>&1; then
   if command -v apk >/dev/null 2>&1; then
-    apk add --no-cache bash curl ca-certificates || echo "⚠ helper: apk add bash/curl failed — install.sh может не запуститься"
+    apk add --no-cache bash curl ca-certificates openssl tar \\
+      || echo "⚠ helper: apk add bash/curl/openssl/tar failed — install.sh может не запуститься"
   elif command -v apt-get >/dev/null 2>&1; then
     export DEBIAN_FRONTEND=noninteractive
-    apt-get update -qq >/dev/null && apt-get install -y -qq bash curl ca-certificates || echo "⚠ helper: apt bash/curl failed — install.sh может не запуститься"
+    apt-get update -qq >/dev/null \\
+      && apt-get install -y -qq bash curl ca-certificates openssl tar \\
+      || echo "⚠ helper: apt bash/curl/openssl/tar failed — install.sh может не запуститься"
   fi
 fi
 `.trim();
@@ -1626,6 +1634,8 @@ echo "  staging: ${stageInHelper} (host: ${tmpDir.replace(DATA_DIR, dataHost)})"
 ${prelude}
 ${fetchTools ? `${fetchTools}\n` : ""}command -v bash >/dev/null 2>&1 || { echo "⚠ helper: нет bash после apk/apt — см. ошибки apk выше"; exit 126; }
 command -v curl >/dev/null 2>&1 || { echo "⚠ helper: нет curl после apk/apt"; exit 126; }
+command -v openssl >/dev/null 2>&1 || { echo "⚠ helper: нет openssl после apk/apt — install.sh падает на генерации пароля"; exit 126; }
+command -v tar >/dev/null 2>&1 || { echo "⚠ helper: нет tar после apk/apt — install.sh падает на распаковке релиза"; exit 126; }
 set +e
 ( cd ${stageInHelper} && bash ./install.sh )
 rv=$?
