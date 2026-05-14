@@ -389,10 +389,10 @@ function dockerCliHelperEnsureFetchToolsScript() {
 # bash + curl для приватного install.sh (#!/usr/bin/env bash у большинства install.sh из репозиториев GitHub).
 if ! command -v bash >/dev/null 2>&1 || ! command -v curl >/dev/null 2>&1; then
   if command -v apk >/dev/null 2>&1; then
-    apk add --no-cache bash curl ca-certificates || echo "⚠ helper: apk add bash/curl failed — install.sh может не запуститься" >> /mnt/data/community-install-last.log
+    apk add --no-cache bash curl ca-certificates || echo "⚠ helper: apk add bash/curl failed — install.sh может не запуститься"
   elif command -v apt-get >/dev/null 2>&1; then
     export DEBIAN_FRONTEND=noninteractive
-    apt-get update -qq >/dev/null && apt-get install -y -qq bash curl ca-certificates || echo "⚠ helper: apt bash/curl failed — install.sh может не запуститься" >> /mnt/data/community-install-last.log
+    apt-get update -qq >/dev/null && apt-get install -y -qq bash curl ca-certificates || echo "⚠ helper: apt bash/curl failed — install.sh может не запуститься"
   fi
 fi
 `.trim();
@@ -1567,15 +1567,20 @@ app.post("/api/community/run-private-install", requireAuth, async (req, res) => 
       const prelude = COMMUNITY_SKIP_REMOVE_FREE_BEFORE_PRIVATE_PRO
         ? "sleep 2"
         : [
-            `sleep 3; docker rm -f ${freePanelName} ${freeLandingName} 2>/dev/null || true`,
+            "sleep 3",
+            `docker rm -f ${freePanelName} ${freeLandingName} 2>/dev/null || true`,
             `docker rm -f ${staleProName} 2>/dev/null || true`,
-            'for __amz_hp in $(docker ps -aq --filter name=amnezia-admin-pro 2>/dev/null || true); do docker rm -f "$__amz_hp" 2>/dev/null || true; done',
-          ].join(" ");
+            'for __amz_hp in $(docker ps -aq --filter name=amnezia-admin-pro 2>/dev/null); do docker rm -f "$__amz_hp" 2>/dev/null || true; done',
+          ].join("; ");
       const fetchTools = dockerCliHelperEnsureFetchToolsScript();
       const sh = `
+exec >>"/mnt/data/community-install-last.log" 2>&1
 set -eu
+echo "→ helper (docker cli): prelude + bash/curl..."
 ${prelude}
-${fetchTools ? `${fetchTools}\n` : ""}cd /mnt/stage && exec bash ./install.sh >> /mnt/data/community-install-last.log 2>&1
+${fetchTools ? `${fetchTools}\n` : ""}command -v bash >/dev/null 2>&1 || { echo "⚠ helper: нет bash после apk/apt — см. ошибки apk выше"; exit 126; }
+command -v curl >/dev/null 2>&1 || { echo "⚠ helper: нет curl после apk/apt"; exit 126; }
+cd /mnt/stage && exec bash ./install.sh
 `.trim();
 
       const dr = spawn(
@@ -1591,17 +1596,26 @@ ${fetchTools ? `${fetchTools}\n` : ""}cd /mnt/stage && exec bash ./install.sh >>
           `-v`,
           `${dataAbs}:/mnt/data`,
           "-e",
-          `GITHUB_TOKEN=${token}`,
+          "GITHUB_TOKEN",
           "-e",
-          `GH_TOKEN=${token}`,
+          "GH_TOKEN",
           "-e",
-          "GIT_TERMINAL_PROMPT=0",
+          "GIT_TERMINAL_PROMPT",
           helperImage,
           "sh",
           "-lc",
           sh,
         ],
-        { detached: true, stdio: "ignore" },
+        {
+          detached: true,
+          stdio: "ignore",
+          env: {
+            ...process.env,
+            GITHUB_TOKEN: token,
+            GH_TOKEN: token,
+            GIT_TERMINAL_PROMPT: "0",
+          },
+        },
       );
       dr.unref();
       dr.once("exit", (code, signal) => finalize(code, signal));
