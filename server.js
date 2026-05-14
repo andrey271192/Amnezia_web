@@ -1580,7 +1580,13 @@ echo "→ helper (docker cli): prelude + bash/curl..."
 ${prelude}
 ${fetchTools ? `${fetchTools}\n` : ""}command -v bash >/dev/null 2>&1 || { echo "⚠ helper: нет bash после apk/apt — см. ошибки apk выше"; exit 126; }
 command -v curl >/dev/null 2>&1 || { echo "⚠ helper: нет curl после apk/apt"; exit 126; }
-cd /mnt/stage && exec bash ./install.sh
+set +e
+( cd /mnt/stage && bash ./install.sh )
+rv=$?
+set -e
+echo ""
+echo "--- helper завершён code=\${rv} (\$(date -u +%Y-%m-%dT%H:%M:%SZ) UTC) ---"
+exit "\${rv}"
 `.trim();
 
       const dr = spawn(
