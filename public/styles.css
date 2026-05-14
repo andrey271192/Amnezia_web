@@ -995,3 +995,44 @@ tr:last-child td {
 .edition-act-ok {
   color: #a7f3d0 !important;
 }
+
+.edition-banner-install-log {
+  margin-top: 0.75rem;
+}
+
+.edition-banner-install-log-head {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  margin-bottom: 0.35rem;
+  font-size: 0.78rem;
+}
+
+.edition-banner-install-status.small {
+  font-size: 0.72rem;
+  margin-bottom: 0.35rem;
+}
+
+.edition-banner-install-status.err {
+  color: #fca5a5 !important;
+}
+
+.edition-banner-install-pre {
+  max-height: 240px;
+  overflow: auto;
+  margin: 0;
+  padding: 0.5rem 0.65rem;
+  border-radius: 10px;
+  border: 1px solid rgba(148, 163, 184, 0.35);
+  background: rgba(15, 23, 42, 0.75);
+  color: var(--text);
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+.edition-banner-install-pre.monospace {
+  font-family: "JetBrains Mono", ui-monospace, monospace;
+}

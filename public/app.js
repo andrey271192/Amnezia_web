@@ -63,6 +63,143 @@ let uiHidden = { users: false, warp: false, cascade: false };
 const editionBanner = document.querySelector("#edition-banner");
 const DEFAULT_HEADER_SUB = document.querySelector(".top .sub")?.textContent?.trim() || "";
 
+/** POLL для живого журнала установки PRO (@type {number | null}) */
+let communityInstallLogInterval = null;
+/** Следующий offset для GET /api/community/install-log (@type {number | null}) */
+let communityInstallLogSince = null;
+/** Аккумулированный текст (дополняется кусками) */
+let communityInstallLogShown = "";
+
+function stopCommunityInstallLogPolling() {
+  if (communityInstallLogInterval !== null) {
+    clearInterval(communityInstallLogInterval);
+    communityInstallLogInterval = null;
+  }
+}
+
+async function pollCommunityInstallLogOnce() {
+  const pre = editionBanner?.querySelector(".edition-banner-install-pre");
+  const statusLine = editionBanner?.querySelector(".edition-banner-install-status");
+  if (!pre || !editionBanner?.querySelector(".edition-banner-install-log")) {
+    stopCommunityInstallLogPolling();
+    return;
+  }
+
+  try {
+    const url =
+      communityInstallLogSince === null
+        ? "/api/community/install-log"
+        : `/api/community/install-log?since=${encodeURIComponent(String(communityInstallLogSince))}`;
+    const r = await fetch(url, { credentials: "same-origin" });
+    const j = await r.json().catch(() => null);
+    if (!r.ok) {
+      if (statusLine) {
+        statusLine.textContent =
+          typeof j?.error === "string" ? j.error : `Ошибка ${r.status}`;
+        statusLine.classList.add("err");
+      }
+      return;
+    }
+    if (statusLine) {
+      statusLine.classList.remove("err");
+      if (!j.exists) {
+        statusLine.textContent =
+          communityInstallLogSince === null ? "Журнал пока пустой — секунду…" : "Обновление…";
+      } else if (communityInstallLogSince === null && j.totalBytes > j.since1) {
+        statusLine.textContent = `Хвост журнала (${fmtBytesRu(Math.max(j.since1 - j.since0, 0))} из ~${fmtBytesRu(j.totalBytes)}) · автообновление…`;
+      } else {
+        statusLine.textContent = `Размер журнала ≈ ${fmtBytesRu(j.totalBytes)} · автообновление каждые 2 с…`;
+      }
+    }
+
+    const chunk = typeof j.chunk === "string" ? j.chunk : "";
+    if (!j.exists) return;
+
+    const replace = Boolean(j.resetSuggested || communityInstallLogSince === null);
+    if (replace) communityInstallLogShown = chunk;
+    else communityInstallLogShown += chunk;
+
+    pre.textContent = communityInstallLogShown;
+    communityInstallLogSince = typeof j.since1 === "number" ? j.since1 : communityInstallLogSince;
+    pre.scrollTop = pre.scrollHeight;
+  } catch (_e) {
+    if (statusLine) {
+      statusLine.textContent = "Не удалось запросить журнал (сеть).";
+      statusLine.classList.add("err");
+    }
+  }
+}
+
+function fmtBytesRu(n) {
+  const x = Number(n);
+  if (!Number.isFinite(x)) return "";
+  if (x < 1024) return `${Math.round(x)} B`;
+  if (x < 1024 * 1024) return `${Math.round(x / 102.4) / 10} KiB`;
+  return `${Math.round(x / (1024 * 102.4)) / 10} MiB`;
+}
+
+function ensureEditionBannerInstallLogPanel() {
+  if (!editionBanner) return null;
+  let wrap = editionBanner.querySelector(".edition-banner-install-log");
+  if (!wrap) {
+    wrap = document.createElement("div");
+    wrap.className = "edition-banner-install-log";
+    const hdr = document.createElement("div");
+    hdr.className = "edition-banner-install-log-head";
+    hdr.innerHTML =
+      '<span class="muted">Журнал установки</span> <button type="button" class="btn small ghost edition-install-log-pause" title="Пауза обновления">Пауза</button>';
+
+    const statusLine = document.createElement("div");
+    statusLine.className = "edition-banner-install-status muted small";
+    statusLine.textContent = "Запрос журнала…";
+
+    const pre = document.createElement("pre");
+    pre.className = "edition-banner-install-pre monospace";
+
+    hdr.querySelector(".edition-install-log-pause")?.addEventListener("click", () => {
+      const btn = hdr.querySelector(".edition-install-log-pause");
+      if (!btn || !editionBanner.contains(wrap)) return;
+      const paused = btn.dataset.paused === "1";
+      if (paused) {
+        btn.dataset.paused = "";
+        btn.textContent = "Пауза";
+        startCommunityInstallLogPollingResume();
+      } else {
+        btn.dataset.paused = "1";
+        btn.textContent = "Продолжить";
+        stopCommunityInstallLogPolling();
+      }
+    });
+
+    wrap.append(hdr, statusLine, pre);
+    editionBanner.querySelector(".edition-banner-activation")?.appendChild(wrap);
+  }
+  return wrap;
+}
+
+function startCommunityInstallLogPollingResume() {
+  stopCommunityInstallLogPolling();
+  void pollCommunityInstallLogOnce();
+  communityInstallLogInterval = window.setInterval(() => {
+    void pollCommunityInstallLogOnce();
+  }, 2000);
+}
+
+/** Сброс и показ живого журнала (после «Установить PRO»). */
+function startCommunityInstallLogPollingFresh() {
+  communityInstallLogSince = null;
+  communityInstallLogShown = "";
+  const wrap = ensureEditionBannerInstallLogPanel();
+  const pre = wrap?.querySelector(".edition-banner-install-pre");
+  const st = wrap?.querySelector(".edition-banner-install-status");
+  if (pre) pre.textContent = "";
+  if (st) {
+    st.classList.remove("err");
+    st.textContent = "Запрос журнала…";
+  }
+  startCommunityInstallLogPollingResume();
+}
+
 /** Состояние редакции панели (community = просмотр + удаление; остальные мутации — PRO). */
 let editionState = {
   tier: "pro",
@@ -104,6 +241,7 @@ function applyEditionPayload(data) {
   }
   if (editionBanner) {
     if (editionState.tier === "community") {
+      const preservedInstallLog = editionBanner.querySelector(".edition-banner-install-log");
       editionBanner.classList.remove("hidden");
       editionBanner.innerHTML = "";
       const wrap = document.createElement("div");
@@ -184,6 +322,7 @@ function applyEditionPayload(data) {
               j.message ||
               "Установка запущена. Через 2–5 минут откройте панель снова по тому же адресу (или несколько раз обновите страницу).";
             inp.value = "";
+            startCommunityInstallLogPollingFresh();
           } catch (e) {
             msg.className = "edition-banner-act-msg status err";
             msg.textContent = String(e?.message || e);
@@ -193,9 +332,11 @@ function applyEditionPayload(data) {
 
         row.append(inp, go);
         act.append(cap, row, msg);
+        if (preservedInstallLog) act.appendChild(preservedInstallLog);
         editionBanner.appendChild(act);
       }
     } else {
+      stopCommunityInstallLogPolling();
       editionBanner.classList.add("hidden");
       editionBanner.innerHTML = "";
     }

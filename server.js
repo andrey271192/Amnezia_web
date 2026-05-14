@@ -1629,6 +1629,116 @@ cd /mnt/stage && exec bash ./install.sh >> /mnt/data/community-install-last.log 
   }
 });
 
+const COMMUNITY_INSTALL_LOG_BASENAME = "community-install-last.log";
+
+function clampCommunityInstallLogRange(name, fallback, minV, maxV) {
+  const x = Number(process.env[name]);
+  if (!Number.isFinite(x)) return fallback;
+  return Math.min(Math.max(Math.trunc(x), minV), maxV);
+}
+
+/**
+ * Прочитать кусок `community-install-last.log`: без `since` — хвост (для первого экрана);
+ * с `since` — блок байт начиная с offset (до CHUNK байт за запрос).
+ */
+app.get("/api/community/install-log", requireAuth, (req, res) => {
+  if (!IS_COMMUNITY || !ALLOW_COMMUNITY_GITHUB_ACTIVATION) {
+    return res.status(403).json({ error: "Недоступно." });
+  }
+  const TAIL_BYTES = clampCommunityInstallLogRange(
+    "COMMUNITY_INSTALL_LOG_TAIL_BYTES",
+    96 * 1024,
+    1024,
+    512 * 1024,
+  );
+  const MAX_CHUNK = clampCommunityInstallLogRange(
+    "COMMUNITY_INSTALL_LOG_API_CHUNK_MAX",
+    512 * 1024,
+    4096,
+    2 * 1024 * 1024,
+  );
+
+  const logPath = path.join(DATA_DIR, COMMUNITY_INSTALL_LOG_BASENAME);
+
+  const sendAbsent = () =>
+    res.json({
+      exists: false,
+      totalBytes: 0,
+      chunk: "",
+      since0: 0,
+      since1: 0,
+      resetSuggested: false,
+    });
+
+  if (!fs.existsSync(logPath)) {
+    sendAbsent();
+    return;
+  }
+
+  let stat;
+  try {
+    stat = fs.statSync(logPath);
+    if (!stat.isFile()) {
+      sendAbsent();
+      return;
+    }
+  } catch {
+    return res.status(500).json({ error: "Не удалось прочитать журнал установки." });
+  }
+
+  const totalBytes = Number(stat.size) || 0;
+  let sinceParsed = NaN;
+  const q = req.query.since;
+  if (typeof q === "string" && q.trim() !== "") {
+    sinceParsed = Number(q.trim());
+  }
+  let resetSuggested = false;
+  let sinceByte;
+  if (!Number.isFinite(sinceParsed) || sinceParsed < 0) {
+    sinceByte = Math.max(0, totalBytes - TAIL_BYTES);
+  } else if (sinceParsed > totalBytes) {
+    resetSuggested = true;
+    sinceByte = Math.max(0, totalBytes - TAIL_BYTES);
+  } else {
+    sinceByte = sinceParsed;
+  }
+
+  const readable = Math.max(0, totalBytes - sinceByte);
+  const readLen = Math.min(readable, MAX_CHUNK);
+  if (readLen === 0 || totalBytes <= 0) {
+    res.json({
+      exists: true,
+      totalBytes,
+      chunk: "",
+      since0: sinceByte,
+      since1: sinceByte,
+      resetSuggested,
+    });
+    return;
+  }
+
+  let chunkBuf = Buffer.alloc(readLen);
+  try {
+    const fd = fs.openSync(logPath, "r");
+    try {
+      fs.readSync(fd, chunkBuf, 0, readLen, sinceByte);
+    } finally {
+      fs.closeSync(fd);
+    }
+  } catch {
+    return res.status(500).json({ error: "Ошибка чтения журнала установки." });
+  }
+
+  res.json({
+    exists: true,
+    totalBytes,
+    chunk: chunkBuf.toString("utf8"),
+    since0: sinceByte,
+    since1: sinceByte + readLen,
+    resetSuggested,
+  });
+});
+
 app.get("/health", (_req, res) => {
   res.json({ ok: true });
 });

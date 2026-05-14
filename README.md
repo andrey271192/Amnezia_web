@@ -48,6 +48,8 @@ cd /opt/amnezia-admin && chmod +x scripts/install.sh && sudo SKIP_DOWNLOAD=1 bas
 | `COMMUNITY_PRIVATE_INSTALL_SCRIPT_URL` | `https://raw.githubusercontent.com/andrey271192/amnezia_web-pro/main/scripts/install.sh` | Сырой URL `scripts/install.sh` в **вашем** приватном репозитории PRO |
 | `COMMUNITY_INSTALL_FETCH_MS` | `60000` | Таймаут HTTP при скачивании установщика из GitHub |
 | `PRIVATE_INSTALL_SCRIPT_MAX_BYTES` | `2097152` | Максимальный размер скачанного скрипта (байты) |
+| `COMMUNITY_INSTALL_LOG_TAIL_BYTES` | `98304` | Первый ответ **`GET /api/community/install-log`** без `since` отдаёт **хвост** последних N байт (для живого блока в UI при установке PRO). Диапазон 1 KiB … 512 KiB через env. |
+| `COMMUNITY_INSTALL_LOG_API_CHUNK_MAX` | `524288` | Максимум байт **за один** запрос «догонять» журнал (~512 KiB; верхний предел через env ограничен). |
 | `COMMUNITY_DISABLE_DOCKER_CLI_HELPER` | _(не задано)_ | Если `1`, установка из UI снова только «bash внутри панели» (часто конфликт **:8080** с PRO). По умолчанию используется одноразовый контейнер **docker:cli**, который **снимает FREE** и зависший PRO перед `install.sh`. |
 | `COMMUNITY_SKIP_REMOVE_FREE_BEFORE_PRIVATE_PRO` | `0` | `1` — не выполнять `docker rm` FREE/лендинга перед install (если знаете, что делаете). |
 | `COMMUNITY_PRO_INSTALL_HELPER_IMAGE` | `docker:26-cli` | Образ с бинарём `docker` для фонового контейнера (нужен доступ к демону по сокету). |
@@ -91,6 +93,8 @@ curl -fsSL https://raw.githubusercontent.com/andrey271192/amnezia_web/main/scrip
 ### Пропало поле «токен GitHub» под плашкой FREE
 
 Форма показывается только если в контейнере **`ALLOW_COMMUNITY_GITHUB_ACTIVATION=1`** (и редакция **community**). Переменную нужно хотя бы один раз задать с **`export`** (см. выше). Начиная с актуального **`install.sh`**, при следующем обновлении панели **`ALLOW_COMMUNITY_*`**, **`COMMUNITY_UPGRADE_*`**, **`AMNEZIA_EDITION`** и ряд других значений **подтягиваются из предыдущего контейнера `amnezia-admin`**, чтобы не терять настройку.
+
+После успешной кнопки **«Установить PRO»** в той же панели открывается **живой блок «Журнал установки»** (поллинг каждые 2 с к **`GET /api/community/install-log`**; для запросов нужна сессия в браузере). Пока старый контейнер FREE снят и новый образ ещё не поднял ту же вкладку, поток журнала в браузере **прерывается** — откройте адрес панели снова после старта PRO; файл **`community-install-last.log`** на томе данных тот же. Кнопка **«Пауза»** останавливает опрос журнала.
 
 ### `Bind for 0.0.0.0:8080 failed: port is already allocated` у `amnezia-admin-pro`
 
