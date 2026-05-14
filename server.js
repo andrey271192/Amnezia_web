@@ -442,6 +442,65 @@ fi
 `.trim();
 }
 
+/**
+ * Авто-обнаружение профилей `amnezia-awg*` до старта PRO `install.sh`.
+ * Возвращает JSON, готовый для `-e AWG_PROFILES=...` или пустую строку,
+ * если найден ровно один контейнер (fallback panel-side тогда корректен).
+ *
+ * Метки берём из публичных портов (`443/udp` → "AmneziaWG (443)"), порядок —
+ * по возрастанию первого UDP-порта (если совпадает — по имени).
+ */
+function autoDiscoverAwgProfilesJson() {
+  if (envTruthy(process.env.COMMUNITY_DISABLE_AWG_PROFILES_AUTODETECT)) return "";
+  if (process.env.AWG_PROFILES?.trim()) return process.env.AWG_PROFILES.trim();
+  try {
+    const namesOut = execFileSync(
+      "docker",
+      ["ps", "--format", "{{.Names}}", "--filter", "name=^amnezia-awg"],
+      { stdio: ["ignore", "pipe", "ignore"], timeout: 5000 },
+    )
+      .toString()
+      .trim();
+    const names = namesOut.split("\n").map((x) => x.trim()).filter(Boolean);
+    if (names.length < 2) return "";
+    const entries = names
+      .map((name) => {
+        let firstUdp = null;
+        let portLabel = "";
+        try {
+          const ports = execFileSync("docker", ["port", name], {
+            stdio: ["ignore", "pipe", "ignore"],
+            timeout: 5000,
+          })
+            .toString()
+            .trim();
+          const udpLine = ports.split("\n").find((l) => /\/udp\b/.test(l));
+          if (udpLine) {
+            const m = udpLine.match(/^(\d+)\/udp/);
+            if (m) {
+              firstUdp = Number(m[1]);
+              portLabel = ` (${m[1]})`;
+            }
+          }
+        } catch {
+          //
+        }
+        const idSuffix = name.replace(/^amnezia-/, "") || name;
+        return {
+          id: idSuffix,
+          label: `AmneziaWG${portLabel}`,
+          container: name,
+          firstUdp: firstUdp ?? 1 << 30,
+        };
+      })
+      .sort((a, b) => a.firstUdp - b.firstUdp || a.container.localeCompare(b.container))
+      .map(({ id, label, container }) => ({ id, label, container }));
+    return JSON.stringify(entries);
+  } catch {
+    return "";
+  }
+}
+
 function privateInstallScriptUrlLogged() {
   try {
     const u = new URL(COMMUNITY_PRIVATE_INSTALL_SCRIPT_URL);
@@ -1616,6 +1675,13 @@ app.post("/api/community/run-private-install", requireAuth, async (req, res) => 
       const dataHost = HOST_DATA_DIR;
       const relStage = path.relative(DATA_DIR, tmpDir);
       const stageInHelper = `/mnt/data/${relStage}`;
+      const autoAwgProfilesJson = autoDiscoverAwgProfilesJson();
+      if (autoAwgProfilesJson) {
+        fs.appendFileSync(
+          logAbs,
+          `→ AWG_PROFILES для PRO собран автоматически из живых amnezia-awg* контейнеров: ${autoAwgProfilesJson}\n`,
+        );
+      }
       const prelude = COMMUNITY_SKIP_REMOVE_FREE_BEFORE_PRIVATE_PRO
         ? "sleep 2"
         : [
@@ -1661,6 +1727,7 @@ exit "\${rv}"
           "GH_TOKEN",
           "-e",
           "GIT_TERMINAL_PROMPT",
+          ...(autoAwgProfilesJson ? ["-e", "AWG_PROFILES"] : []),
           helperImage,
           "sh",
           "-lc",
@@ -1674,6 +1741,7 @@ exit "\${rv}"
             GITHUB_TOKEN: token,
             GH_TOKEN: token,
             GIT_TERMINAL_PROMPT: "0",
+            ...(autoAwgProfilesJson ? { AWG_PROFILES: autoAwgProfilesJson } : {}),
           },
         },
       );
