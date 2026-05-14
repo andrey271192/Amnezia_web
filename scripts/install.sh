@@ -56,19 +56,33 @@ if [[ "${SKIP_DOWNLOAD:-}" != "1" ]]; then
     --retry-connrefused
   )
   if [[ "${INSTALL_SCRIPT_VERBOSE:-}" == "1" ]]; then CURL_OPTS+=(--progress-bar); fi
+  GH_AUTH_TOKEN="${GITHUB_TOKEN:-${GH_TOKEN:-}}"
+  if [[ -n "${GH_AUTH_TOKEN}" ]]; then
+    CURL_OPTS+=(-H "Authorization: Bearer ${GH_AUTH_TOKEN}")
+    CURL_OPTS+=(-H "X-GitHub-Api-Version: 2022-11-28")
+  fi
   CURL_URL="${GITHUB_REPO_URL_OVERRIDE:-}"
   if [[ -z "${CURL_URL}" ]]; then
-    CURL_URL="https://github.com/${GITHUB_REPO}/archive/refs/heads/${BRANCH}.tar.gz"
+    if [[ -n "${GH_AUTH_TOKEN}" ]]; then
+      CURL_URL="https://api.github.com/repos/${GITHUB_REPO}/tarball/${BRANCH}"
+    else
+      CURL_URL="https://github.com/${GITHUB_REPO}/archive/refs/heads/${BRANCH}.tar.gz"
+    fi
   fi
   if ! curl "${CURL_OPTS[@]}" "${CURL_URL}" | tar xz -C "${TMP}"; then
     echo "Ошибка: не удалось скачать или распаковать архив (${CURL_URL})."
-    echo "Подсказка: проверьте ping/curl до github.com, при необходимости export GITHUB_REPO_URL_OVERRIDE='…' или INSTALL_SCRIPT_VERBOSE=1."
+    echo "Подсказка: проверьте токен (для приватного репо нужен GITHUB_TOKEN/GH_TOKEN с правом Contents:Read), ping/curl до github.com, при необходимости export GITHUB_REPO_URL_OVERRIDE='…' или INSTALL_SCRIPT_VERBOSE=1."
     exit 1
   fi
   echo "→ Перенос распакованного дерева в ${INSTALL_DIR}…"
+  __extracted_dir="$(find "${TMP}" -mindepth 1 -maxdepth 1 -type d | head -n1)"
+  if [[ -z "${__extracted_dir}" ]]; then
+    echo "Ошибка: распакованный архив пуст (${CURL_URL})."
+    exit 1
+  fi
   rm -rf "${INSTALL_DIR}"
   mkdir -p "$(dirname "${INSTALL_DIR}")"
-  mv "${TMP}/${REPO_SLUG}-${BRANCH}" "${INSTALL_DIR}"
+  mv "${__extracted_dir}" "${INSTALL_DIR}"
   TMP=""
   echo "→ Источники на месте."
 fi
