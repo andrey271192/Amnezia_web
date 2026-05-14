@@ -70,6 +70,7 @@ let editionState = {
   upgradeUrl: null,
   upgradePitch: null,
   showDebugWg: true,
+  githubActivationAllowed: false,
 };
 
 function applyEditionPayload(data) {
@@ -81,6 +82,7 @@ function applyEditionPayload(data) {
     upgradeUrl: typeof ed.upgradeUrl === "string" ? ed.upgradeUrl : null,
     upgradePitch: typeof ed.upgradePitch === "string" ? ed.upgradePitch : null,
     showDebugWg: ed.showDebugWg !== false,
+    githubActivationAllowed: Boolean(ed.githubActivationAllowed),
   };
   const titleEl = document.querySelector(".top h1");
   if (titleEl) {
@@ -122,6 +124,75 @@ function applyEditionPayload(data) {
       cta.textContent = "Разблокировать PRO (Boosty)";
       wrap.append(textCol, cta);
       editionBanner.appendChild(wrap);
+
+      if (editionState.githubActivationAllowed) {
+        const act = document.createElement("div");
+        act.className = "edition-banner-activation muted";
+        const cap = document.createElement("div");
+        cap.className = "edition-banner-act-title";
+        cap.textContent =
+          "Подписка получена и есть GitHub‑токен к приватному репозиторию? Запуск установки PRO с сервера (порт обычно сохранится; процесс см. журнал):";
+
+        const row = document.createElement("div");
+        row.className = "edition-banner-act-row";
+
+        const inp = document.createElement("input");
+        inp.type = "password";
+        inp.autocomplete = "new-password";
+        inp.spellcheck = false;
+        inp.placeholder = "Токен (classic: repo или fine‑grained: Contents Read)";
+        inp.className = "edition-banner-act-input monospace";
+
+        const go = document.createElement("button");
+        go.type = "button";
+        go.className = "btn small primary";
+        go.textContent = "Установить PRO";
+
+        const msg = document.createElement("p");
+        msg.className = "edition-banner-act-msg muted";
+        msg.setAttribute("role", "status");
+        msg.textContent = "";
+
+        go.addEventListener("click", async () => {
+          msg.textContent = "";
+          msg.className = "edition-banner-act-msg muted";
+          const tok = inp.value.trim();
+          if (!tok) {
+            msg.className = "edition-banner-act-msg status err";
+            msg.textContent = "Вставьте токен.";
+            return;
+          }
+          go.disabled = true;
+          try {
+            const r = await fetch("/api/community/run-private-install", {
+              method: "POST",
+              credentials: "same-origin",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ githubToken: tok }),
+            });
+            const j = await r.json().catch(() => ({}));
+            if (!r.ok) {
+              msg.className = "edition-banner-act-msg status err";
+              msg.textContent = j.error || `Ошибка ${r.status}`;
+              go.disabled = false;
+              return;
+            }
+            msg.className = "edition-banner-act-msg edition-act-ok muted";
+            msg.textContent =
+              j.message ||
+              "Установка запущена. Через 2–5 минут откройте панель снова по тому же адресу (или несколько раз обновите страницу).";
+            inp.value = "";
+          } catch (e) {
+            msg.className = "edition-banner-act-msg status err";
+            msg.textContent = String(e?.message || e);
+            go.disabled = false;
+          }
+        });
+
+        row.append(inp, go);
+        act.append(cap, row, msg);
+        editionBanner.appendChild(act);
+      }
     } else {
       editionBanner.classList.add("hidden");
       editionBanner.innerHTML = "";

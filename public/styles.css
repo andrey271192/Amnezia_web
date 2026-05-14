@@ -950,3 +950,48 @@ tr:last-child td {
 .edition-banner-cta {
   flex-shrink: 0;
 }
+
+.edition-banner-activation {
+  margin-top: 0.85rem;
+  padding-top: 0.85rem;
+  border-top: 1px dashed rgba(125, 211, 252, 0.35);
+  width: 100%;
+}
+
+.edition-banner-act-title {
+  font-size: 0.86rem;
+  line-height: 1.45;
+  margin-bottom: 0.5rem;
+}
+
+.edition-banner-act-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+.edition-banner-act-input {
+  flex: 1 1 240px;
+  min-width: 0;
+  padding: 0.45rem 0.65rem;
+  border-radius: 10px;
+  border: 1px solid rgba(148, 163, 184, 0.4);
+  background: rgba(15, 23, 42, 0.7);
+  color: var(--text);
+  font-size: 0.82rem;
+}
+
+.edition-banner-act-input.monospace {
+  font-family: "JetBrains Mono", ui-monospace, monospace;
+}
+
+.edition-banner-act-msg {
+  margin: 0.55rem 0 0 !important;
+  font-size: 0.82rem;
+  line-height: 1.35;
+}
+
+.edition-act-ok {
+  color: #a7f3d0 !important;
+}

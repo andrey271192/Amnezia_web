@@ -40,6 +40,13 @@ const UI_HIDDEN = resolveUiHidden();
 
 const AMNEZIA_EDITION = (process.env.AMNEZIA_EDITION || "pro").trim().toLowerCase();
 const IS_COMMUNITY = AMNEZIA_EDITION === "community";
+const ALLOW_COMMUNITY_GITHUB_ACTIVATION = envTruthy(process.env.ALLOW_COMMUNITY_GITHUB_ACTIVATION);
+const COMMUNITY_PRIVATE_INSTALL_SCRIPT_URL =
+  process.env.COMMUNITY_PRIVATE_INSTALL_SCRIPT_URL?.trim() ||
+  "https://raw.githubusercontent.com/andrey271192/amnezia_web-pro/main/scripts/install.sh";
+const PRIVATE_INSTALL_SCRIPT_MAX_BYTES = Number(process.env.PRIVATE_INSTALL_SCRIPT_MAX_BYTES || 2_097_152) || 2_097_152;
+/** Флаг выполнения одноразового bash install из UI (держим второй параллельный запрос). */
+let communityPrivateInstallBusy = false;
 const COMMUNITY_UPGRADE_URL =
   process.env.COMMUNITY_UPGRADE_URL?.trim() ||
   "https://boosty.to/andrey27/purchase/3906453?ssource=DIRECT&share=subscription_link";
@@ -54,6 +61,7 @@ function editionPayload() {
     upgradeUrl: IS_COMMUNITY ? COMMUNITY_UPGRADE_URL : null,
     upgradePitch: IS_COMMUNITY ? COMMUNITY_UPGRADE_PITCH : null,
     showDebugWg: !IS_COMMUNITY,
+    githubActivationAllowed: ALLOW_COMMUNITY_GITHUB_ACTIVATION && IS_COMMUNITY,
   };
 }
 
@@ -347,6 +355,23 @@ function rejectCommunityProOnly(res) {
     upgradeRequired: true,
     upgradeUrl: COMMUNITY_UPGRADE_URL,
   });
+}
+
+/** Токен GitHub только из печатаемых ASCII без пробелов/newline (classic ghp_* / github_pat_*). */
+function validateGithubBearerToken(tok) {
+  if (typeof tok !== "string") return false;
+  const s = tok.trim();
+  if (s.length < 20 || s.length > 4096) return false;
+  return /^[!-~]+$/.test(s);
+}
+
+function privateInstallScriptUrlLogged() {
+  try {
+    const u = new URL(COMMUNITY_PRIVATE_INSTALL_SCRIPT_URL);
+    return `${u.hostname}${u.pathname}`;
+  } catch {
+    return "(invalid PRIVATE_INSTALL_SCRIPT_URL)";
+  }
 }
 
 function requireProTier(_req, res, next) {
@@ -1365,7 +1390,140 @@ if (UI_HIDDEN.users || UI_HIDDEN.warp || UI_HIDDEN.cascade) {
 if (IS_COMMUNITY) {
   console.warn(`Редакция community (только просмотр клиентов). PRO: ${COMMUNITY_UPGRADE_URL}`);
 }
+if (ALLOW_COMMUNITY_GITHUB_ACTIVATION && IS_COMMUNITY) {
+  console.warn(
+    "Разрешена установка PRO из UI (ALLOW_COMMUNITY_GITHUB_ACTIVATION): GitHub-токен не сохранять в журналах; защитите доступ к паролю панели и Docker-сокету.",
+  );
+}
 app.use(express.json({ limit: "512kb" }));
+
+app.post("/api/community/run-private-install", requireAuth, async (req, res) => {
+  if (!IS_COMMUNITY || !ALLOW_COMMUNITY_GITHUB_ACTIVATION) {
+    return res.status(403).json({
+      error: "Запуск установки PRO из панели отключён.",
+    });
+  }
+  if (communityPrivateInstallBusy) {
+    return res.status(429).json({
+      error: "Установка PRO уже выполняется. Через 1–2 минуты обновите страницу или см. журнал ниже.",
+    });
+  }
+
+  const token = typeof req.body?.githubToken === "string" ? req.body.githubToken.trim() : "";
+  if (!validateGithubBearerToken(token)) {
+    return res.status(400).json({
+      error:
+        "Нужен GitHub-токен с доступом к приватному репозиторию (classic: repo; fine-grained: Contents Read для репозитория со scripts/install.sh).",
+    });
+  }
+
+  let tmpDir = "";
+  communityPrivateInstallBusy = true;
+
+  try {
+    const ac = new AbortController();
+    const timeoutMs = Number(process.env.COMMUNITY_INSTALL_FETCH_MS || 60_000) || 60_000;
+    const tmo = setTimeout(() => ac.abort(), timeoutMs);
+    const ghRes = await fetch(COMMUNITY_PRIVATE_INSTALL_SCRIPT_URL, {
+      redirect: "follow",
+      headers: {
+        Authorization: `token ${token}`,
+        Accept: "*/*",
+        "User-Agent": "amnezia-web-community-private-install",
+      },
+      signal: ac.signal,
+    }).finally(() => clearTimeout(tmo));
+
+    const buf = Buffer.from(await ghRes.arrayBuffer());
+    if (!ghRes.ok || buf.byteLength === 0) {
+      communityPrivateInstallBusy = false;
+      return res.status(400).json({
+        error: `Не удалось скачать install (${ghRes.status}). Проверьте токен и URL.`,
+        urlForDebug: privateInstallScriptUrlLogged(),
+      });
+    }
+    if (buf.byteLength > PRIVATE_INSTALL_SCRIPT_MAX_BYTES) {
+      communityPrivateInstallBusy = false;
+      return res.status(400).json({ error: "Скачанный скрипт слишком большой — отказ." });
+    }
+
+    tmpDir = fs.mkdtempSync(path.join("/tmp", "amnezia-priv-inst-"));
+    const scriptPath = path.join(tmpDir, "install.sh");
+    fs.writeFileSync(scriptPath, buf);
+    fs.chmodSync(scriptPath, 0o700);
+
+    ensureDataDir();
+    const logAbs = path.join(DATA_DIR, "community-install-last.log");
+    const header = `\n${"=".repeat(60)}\n${new Date().toISOString()} — старт install из UI (COMMUNITY)\nURL: ${COMMUNITY_PRIVATE_INSTALL_SCRIPT_URL}\n${"=".repeat(60)}\n`;
+    fs.appendFileSync(logAbs, header);
+
+    const logStream = fs.createWriteStream(logAbs, { flags: "a" });
+
+    const child = spawn("bash", [scriptPath], {
+      cwd: tmpDir,
+      env: {
+        ...process.env,
+        GITHUB_TOKEN: token,
+        GH_TOKEN: token,
+        GIT_TERMINAL_PROMPT: "0",
+      },
+      stdio: ["ignore", "pipe", "pipe"],
+    });
+
+    child.stdout.pipe(logStream, { end: false });
+    child.stderr.pipe(logStream, { end: false });
+
+    let finalized = false;
+    const finalize = (code = null, signal = null, errText = "") => {
+      if (finalized) return;
+      finalized = true;
+      communityPrivateInstallBusy = false;
+      const foot = `\n--- завершено ${new Date().toISOString()}, code=${code ?? "?"}${
+        signal ? ` signal=${signal}` : ""
+      }${errText ? ` err=${errText}` : ""} ---\n`;
+      try {
+        fs.appendFileSync(logAbs, foot);
+      } catch {
+        //
+      }
+      logStream.end(() => {
+        try {
+          fs.rmSync(tmpDir, { recursive: true, force: true });
+        } catch {
+          //
+        }
+      });
+    };
+
+    child.once("exit", (code, signal) => finalize(code, signal));
+    child.once("error", (err) => {
+      console.warn("community-private-install bash:", err?.message || err);
+      finalize(null, null, String(err.message || err));
+    });
+
+    res.status(202).json({
+      ok: true,
+      queued: true,
+      message:
+        "Установка PRO запущена. Панель может прерваться — через 2–5 минут откройте её снова по тому же адресу. Журнал пишется в /data/community-install-last.log в том контейнере, где была FREE-панель (до возможной замены образа).",
+      logInsideContainer: "community-install-last.log",
+    });
+  } catch (e) {
+    communityPrivateInstallBusy = false;
+    if (tmpDir) {
+      try {
+        fs.rmSync(tmpDir, { recursive: true, force: true });
+      } catch {
+        //
+      }
+    }
+    const msg =
+      e?.name === "AbortError"
+        ? "Таймаут загрузки install.sh с GitHub."
+        : e?.message || String(e);
+    return res.status(400).json({ error: msg });
+  }
+});
 
 app.get("/health", (_req, res) => {
   res.json({ ok: true });
