@@ -3,15 +3,30 @@
 Открытая **базовая** веб-панель для **просмотра** клиентов **AmneziaWG** на своём VPS: таблица клиентов, статус «в туннеле», AllowedIPs, несколько инстансов через **`AWG_PROFILES`**, часы сервера и браузера. В редакции **FREE/community** можно **удалить** клиента с сервера (peer и строка в таблице).  
 **Нет** в интерфейсе и по API в FREE: включение/выключение peer, правка дат отключения, переименование, экспорт `.conf`, «Новый клиент под каскад», Cloudflare WARP, синхронизация времени хоста по SSH — это **[версия PRO](https://boosty.to/andrey27/purchase/3906453?ssource=DIRECT&share=subscription_link)** (приватный репозиторий **amnezia_web-PRO**, доступ подписчикам).
 
-Редакция **`community`** задаётся автоматически файлом **`.amnezia-panel-edition`** в корне репозитория (`community`) или переменной окружения **`AMNEZIA_EDITION=community`** в контейнере. Кнопка и текст про подписку настраиваются **`COMMUNITY_UPGRADE_URL`** и **`COMMUNITY_UPGRADE_PITCH`**.
+**Редакция по умолчанию в этом репозитории — FREE (**`community`**, файл **`.amnezia-panel-edition`**). Чтобы клиент мог ввести GitHub-токен и запустить **«Установить PRO»**, используйте **только установку из раздела ниже:** **`INSTALL_FREE_COMMUNITY_ACTIVATION=1`** (создаётся признак **`/opt/amnezia-admin-data/.install-free-github-pro-opt-in`**; следующие апдейты сохранят эту возможность без повторного экспорта). Кнопка Boosty и текст настраиваются **`COMMUNITY_UPGRADE_URL`** и **`COMMUNITY_UPGRADE_PITCH`**.
 
-**Безопасность:** доступ к Docker-сокету в контейнере панели эквивалентен root на хосте — используйте сложный пароль и ограничьте доступ по IP / TLS. Поле установки PRO по GitHub‑токену (`ALLOW_COMMUNITY_GITHUB_ACTIVATION=1`) отключено по умолчанию: при включении любой авторизованный администратор может запускать произвольный `install.sh` на хосте через Docker‑сокет.
+**Безопасность:** доступ к Docker-сокету в контейнере панели эквивалентен root на хосте — используйте сложный пароль и ограничьте доступ по IP / TLS. Режим **«Установить PRO» из панели** (`ALLOW_COMMUNITY_GITHUB_ACTIVATION=1`): любой авторизованный администратор может запускать приватный `install.sh` на хосте через Docker-сокет. Отключить позже — удалите **`${DATA_DIR}/.install-free-github-pro-opt-in`** и перезапустите установщик **без** `INSTALL_FREE…`, переменную **`ALLOW_COMMUNITY_GITHUB_ACTIVATION`** из контейнера не переопределяйте экспортом.
 
 Справочник по типичным сбоям и API (в т.ч. для PRO): в полной документации репозитория PRO.
 
 ---
 
-## Установка одной командой
+## Установка для клиента (FREE с «Установить PRO» по GitHub)
+
+Рекомендуемый вариант: сразу **FREE-панель** с полем **GitHub-токена** под баннером Boosty и кнопкой **«Установить PRO»**:
+
+```bash
+export INSTALL_FREE_COMMUNITY_ACTIVATION=1
+curl -fsSL https://raw.githubusercontent.com/andrey271192/amnezia_web/main/scripts/install.sh | sudo -E bash
+```
+
+Переменная **`INSTALL_FREE_COMMUNITY_ACTIVATION`** сохранится в томе как файл **`.install-free-github-pro-opt-in`** в **`/opt/amnezia-admin-data`**: дальше достаточно обычного **`curl … | sudo bash`** при обновлении (можно без `export`).
+
+---
+
+## Прочее: установка без поля GitHub в панели
+
+Если **специально** не нужно поле для токена (только просмотр FREE и удаление клиентов, без апгрейда из UI):
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/andrey271192/amnezia_web/main/scripts/install.sh | sudo bash
@@ -20,8 +35,13 @@ curl -fsSL https://raw.githubusercontent.com/andrey271192/amnezia_web/main/scrip
 Форк или ветка:
 
 ```bash
-GITHUB_REPO=вы/репо BRANCH=main curl -fsSL https://raw.githubusercontent.com/вы/репо/main/scripts/install.sh | sudo bash
+export GITHUB_REPO="вы/репо"
+export BRANCH="main"
+export INSTALL_FREE_COMMUNITY_ACTIVATION=1
+curl -fsSL "https://raw.githubusercontent.com/${GITHUB_REPO}/${BRANCH}/scripts/install.sh" | sudo -E bash
 ```
+
+Если нужен только FREE **без** поля для токена, не задавайте **`INSTALL_FREE…`** и не используйте **`-E`** (достаточно `sudo bash`).
 
 Уже скачали проект:
 
@@ -37,6 +57,7 @@ cd /opt/amnezia-admin && chmod +x scripts/install.sh && sudo SKIP_DOWNLOAD=1 bas
 
 | Переменная | По умолчанию | Назначение |
 |------------|--------------|------------|
+| `INSTALL_FREE_COMMUNITY_ACTIVATION` | _(не задано)_ | `1` (**один раз** при установке клиента при необходимости): **`AMNEZIA_EDITION=community`** + **`ALLOW_COMMUNITY_GITHUB_ACTIVATION=1`** + маркер в **`${DATA_DIR}/.install-free-github-pro-opt-in`** для следующих запусков установщика. |
 | `GITHUB_REPO` | `andrey271192/amnezia_web` | Архив для установки |
 | `HOST_PORT` | `8080` | Порт панели |
 | `AWG_CONTAINER` | `amnezia-awg2` | Контейнер WG по умолчанию |
@@ -56,16 +77,9 @@ cd /opt/amnezia-admin && chmod +x scripts/install.sh && sudo SKIP_DOWNLOAD=1 bas
 | `COMMUNITY_HELPER_SKIP_PREPARE_TOOLS` | _(не задано)_ | `1` — не ставить `curl` перед приватным `install.sh` в helper (обычно не нужно; образ Alpine часто без `curl`, без него ваш скрипт падает). |
 | `FREE_PANEL_CONTAINER_FOR_PRO_INSTALL` и др. | см. `server.js` | Имена контейнеров для `docker rm` перед install (по умолчанию `amnezia-admin`, `amnezia-web-landing`, `amnezia-admin-pro`). |
 
-Чтобы включить форму установки из панели, задайте в контейнере **`AMNEZIA_EDITION=community`** и **`ALLOW_COMMUNITY_GITHUB_ACTIVATION=1`** (`install.sh`: добавьте `-e ALLOW_COMMUNITY_GITHUB_ACTIVATION=1` или пересоздайте контейнер после правки переменных). URL приватного `install.sh` при необходимости переопределите через **`COMMUNITY_PRIVATE_INSTALL_SCRIPT_URL`**.
+Чтобы включить форму установки из панели после «обычной» установки без **`INSTALL_FREE…`**, задайте в контейнере **`AMNEZIA_EDITION=community`** и **`ALLOW_COMMUNITY_GITHUB_ACTIVATION=1`** (или проще переустановите с **`INSTALL_FREE_COMMUNITY_ACTIVATION=1`**). URL приватного `install.sh` при необходимости переопределите через **`COMMUNITY_PRIVATE_INSTALL_SCRIPT_URL`**.
 
-**Важно:** при запуске `curl … | bash` переменная должна быть **экспортирована**, иначе её не увидит `install.sh`:
-
-```bash
-export ALLOW_COMMUNITY_GITHUB_ACTIVATION=1
-curl -fsSL https://raw.githubusercontent.com/andrey271192/amnezia_web/main/scripts/install.sh | sudo -E bash
-```
-
-(Под не-root добавьте `sudo`; `sudo -E` сохраняет экспортированные переменные.)
+**Важно:** при одноразовом запуске с переменными в одной строке с `curl … | sudo bash` они **пропадают** — нужен **`export`** перед `curl` и **`sudo -E bash`**, см. блок **«Установка для клиента»** выше.
 
 Остальные переменные совместимы с образом панели (см. Dockerfile / `server.js` в этом репозитории).
 
@@ -73,9 +87,13 @@ curl -fsSL https://raw.githubusercontent.com/andrey271192/amnezia_web/main/scrip
 
 ## Обновление
 
+Клиентская панель (после первой установки с **`INSTALL_FREE_COMMUNITY_ACTIVATION=1`** маркер в томе подхватывается автоматически):
+
 ```bash
 curl -fsSL https://raw.githubusercontent.com/andrey271192/amnezia_web/main/scripts/install.sh | sudo bash
 ```
+
+Или явно всегда **`export INSTALL_FREE_COMMUNITY_ACTIVATION=1`** и **`sudo -E bash`** как при первой установке.
 
 После сообщения **`→ Клонирование релиза …`** несколько минут **может ничего не печататься**: идёт `curl … | tar` с GitHub. Для **полосы прогресса**: `sudo INSTALL_SCRIPT_VERBOSE=1 bash` (или передайте переменную в окружение до `|`). Если обрывает по времени или «тишина» часами задайте таймауты: **`CURL_CONNECT_TIMEOUT`** (по умолчанию 30 с к подключению), **`CURL_MAX_TIME`** (по умолчанию до 900 с на загрузку), **`CURL_RETRY`**. Полный URL tar.gz можно подменить: **`GITHUB_REPO_URL_OVERRIDE`** (должен указывать на архив того же вида **`${REPO}-${BRANCH}.tar.gz`**, после распаковки каталог будет **`ИмяРепозитория-${BRANCH}`**).
 
@@ -95,7 +113,7 @@ curl -fsSL https://raw.githubusercontent.com/andrey271192/amnezia_web/main/scrip
 
 ### Пропало поле «токен GitHub» под плашкой FREE
 
-Форма показывается только если в контейнере **`ALLOW_COMMUNITY_GITHUB_ACTIVATION=1`** (и редакция **community**). Переменную нужно хотя бы один раз задать с **`export`** (см. выше). Начиная с актуального **`install.sh`**, при следующем обновлении панели **`ALLOW_COMMUNITY_*`**, **`COMMUNITY_UPGRADE_*`**, **`AMNEZIA_EDITION`** и ряд других значений **подтягиваются из предыдущего контейнера `amnezia-admin`**, чтобы не терять настройку.
+Нужны **`ALLOW_COMMUNITY_GITHUB_ACTIVATION=1`** и редакция **community** (в образе они попадают из **`install.sh`**). Рекомендуется раздел **«Установка для клиента»**: **`INSTALL_FREE_COMMUNITY_ACTIVATION=1`** (создаётся **`…/data/.install-free-github-pro-opt-in`**; дальнейшие **`curl … | sudo bash`** подхватят это сами). При ручном отключении убедитесь, что файл-маркер удалён. Начиная с актуального **`install.sh`**, при апдейте панели многие **`COMMUNITY_*`**, **`ALLOW_COMMUNITY_*`**, **`AMNEZIA_EDITION`** восстанавливаются из **предыдущего** контейнера `amnezia-admin`; маркер в томе остаёт запасным вариантом, если переменная в контейнере пропала.
 
 После успешной кнопки **«Установить PRO»** в той же панели открывается **живой блок «Журнал установки»** (поллинг каждые 2 с к **`GET /api/community/install-log`**; для запросов нужна сессия в браузере). Пока старый контейнер FREE снят и новый образ ещё не поднял ту же вкладку, поток журнала в браузере **прерывается** — откройте адрес панели снова после старта PRO; файл **`community-install-last.log`** на томе данных тот же. Кнопка **«Пауза»** останавливает опрос журнала.
 
