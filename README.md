@@ -82,6 +82,22 @@ curl -fsSL https://raw.githubusercontent.com/andrey271192/amnezia_web/main/scrip
 
 ---
 
+## Частые проблемы
+
+### Пропало поле «токен GitHub» под плашкой FREE
+
+Форма показывается только если в контейнере **`ALLOW_COMMUNITY_GITHUB_ACTIVATION=1`** (и редакция **community**). Переменную нужно хотя бы один раз задать с **`export`** (см. выше). Начиная с актуального **`install.sh`**, при следующем обновлении панели **`ALLOW_COMMUNITY_*`**, **`COMMUNITY_UPGRADE_*`**, **`AMNEZIA_EDITION`** и ряд других значений **подтягиваются из предыдущего контейнера `amnezia-admin`**, чтобы не терять настройку.
+
+### `Bind for 0.0.0.0:8080 failed: port is already allocated` у `amnezia-admin-pro`
+
+На **8080** уже слушает **FREE**‑панель (**`amnezia-admin`**). Перед запуском образа PRO (**`docker compose`**, **`amnezia-web-pro-deploy`**, свой скрипт): **`docker rm -f amnezia-admin`**, затем снова **`up`**. Два контейнера панели на один и тот же порт не поднять.
+
+### Лендинг: порт 80 занят
+
+Если на хосте уже что-то слушает **TCP 80**, установщик сообщит об этом и, при дефолтном **`LANDING_PORT=80`**, сам попробует другой свободный порт (обычно начиная с **8081**). Либо явно: **`LANDING_PORT=8083`**, либо **`SKIP_LANDING=1`**.
+
+---
+
 ## Лицензия
 
 MIT — см. [LICENSE](LICENSE).

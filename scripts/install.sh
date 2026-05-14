@@ -122,18 +122,21 @@ PREV_CONTAINER_ENV=""
 if docker inspect "${CONTAINER_NAME}" >/dev/null 2>&1; then
   PREV_CONTAINER_ENV="$(docker inspect "${CONTAINER_NAME}" --format '{{range .Config.Env}}{{println .}}{{end}}' 2>/dev/null || true)"
 fi
-for __ui_var in UI_HIDE_SECTIONS UI_HIDE_USERS UI_HIDE_WARP UI_HIDE_CASCADE WARP_SSH_INSTALL_DIR; do
-  if [[ -z "${!__ui_var:-}" ]] && [[ -n "${PREV_CONTAINER_ENV}" ]]; then
+for __reuse_var in UI_HIDE_SECTIONS UI_HIDE_USERS UI_HIDE_WARP UI_HIDE_CASCADE WARP_SSH_INSTALL_DIR \
+  ALLOW_COMMUNITY_GITHUB_ACTIVATION COMMUNITY_PRIVATE_INSTALL_SCRIPT_URL COMMUNITY_INSTALL_FETCH_MS PRIVATE_INSTALL_SCRIPT_MAX_BYTES \
+  COMMUNITY_UPGRADE_URL COMMUNITY_UPGRADE_PITCH AMNEZIA_EDITION \
+  EXPORT_CONFIG_SECRET CLIENT_CONFIG_ENDPOINT CLIENT_EXPORT_DNS1 CLIENT_EXPORT_DNS2; do
+  if [[ -z "${!__reuse_var:-}" ]] && [[ -n "${PREV_CONTAINER_ENV}" ]]; then
     PREV_VAL=""
     while IFS= read -r __line; do
-      if [[ "${__line}" == "${__ui_var}="* ]]; then
+      if [[ "${__line}" == "${__reuse_var}="* ]]; then
         PREV_VAL="${__line#*=}"
         break
       fi
     done <<<"${PREV_CONTAINER_ENV}"
     if [[ -n "${PREV_VAL}" ]]; then
-      printf -v "${__ui_var}" '%s' "${PREV_VAL}"
-      echo "→ ${__ui_var} восстановлен из предыдущего контейнера ${CONTAINER_NAME}."
+      printf -v "${__reuse_var}" '%s' "${PREV_VAL}"
+      echo "→ ${__reuse_var} восстановлен из предыдущего контейнера ${CONTAINER_NAME}."
     fi
   fi
 done
@@ -175,15 +178,10 @@ for __warp_var in WARP_DIR WARP_CONF_PATH WARP_CLIENTS_LIST AMNEZIA_START_SCRIPT
   fi
 done
 
-for __export_var in CLIENT_CONFIG_ENDPOINT CLIENT_EXPORT_DNS1 CLIENT_EXPORT_DNS2 EXPORT_CONFIG_SECRET; do
-  if [[ -n "${!__export_var:-}" ]]; then
-    RUN_ENV+=( -e "${__export_var}=${!__export_var}" )
-  fi
-done
-
-for __ui_var in UI_HIDE_SECTIONS UI_HIDE_USERS UI_HIDE_WARP UI_HIDE_CASCADE WARP_SSH_INSTALL_DIR; do
-  if [[ -n "${!__ui_var:-}" ]]; then
-    RUN_ENV+=( -e "${__ui_var}=${!__ui_var}" )
+for __panel_env_var in UI_HIDE_SECTIONS UI_HIDE_USERS UI_HIDE_WARP UI_HIDE_CASCADE \
+  EXPORT_CONFIG_SECRET CLIENT_CONFIG_ENDPOINT CLIENT_EXPORT_DNS1 CLIENT_EXPORT_DNS2; do
+  if [[ -n "${!__panel_env_var:-}" ]]; then
+    RUN_ENV+=( -e "${__panel_env_var}=${!__panel_env_var}" )
   fi
 done
 
@@ -207,6 +205,24 @@ for __ce_var in COMMUNITY_UPGRADE_URL COMMUNITY_UPGRADE_PITCH ALLOW_COMMUNITY_GI
     RUN_ENV+=( -e "${__ce_var}=${!__ce_var}" )
   fi
 done
+
+host_tcp_port_in_use() {
+  local port="$1"
+  command -v ss >/dev/null 2>&1 || return 1
+  ss -tln 2>/dev/null | grep -qE ":${port}([^0-9]|$)"
+}
+
+if [[ "${SKIP_LANDING:-}" != "1" ]] && [[ -d "${INSTALL_DIR}/landing" ]]; then
+  if [[ "${LANDING_PORT:-80}" == "80" ]] && host_tcp_port_in_use 80; then
+    echo "⚠ На хосте занят TCP-порт 80 — лендинг нельзя привязать к :80 без конфликта."
+    LP=8081
+    while host_tcp_port_in_use "${LP}" && [[ "${LP}" -lt 8100 ]]; do
+      LP=$((LP + 1))
+    done
+    LANDING_PORT="${LP}"
+    echo "→ Использую LANDING_PORT=${LANDING_PORT} (или задайте LANDING_PORT=… явно)."
+  fi
+fi
 
 IP="$(hostname -I 2>/dev/null | awk '{print $1}' || true)"
 
