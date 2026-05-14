@@ -1,7 +1,7 @@
 # amnezia_web
 
 Открытая **базовая** веб-панель для **просмотра** клиентов **AmneziaWG** на своём VPS: таблица клиентов, статус «в туннеле», AllowedIPs, несколько инстансов через **`AWG_PROFILES`**, часы сервера и браузера.  
-**Нет** в интерфейсе и по API: включение/выключение peer, правка дат отключения, переименование, удаление, экспорт `.conf`, «Новый клиент под каскад», Cloudflare WARP, синхронизация времени хоста по SSH — это **[версия PRO](https://boosty.to/andrey27/donate)** (приватный репозиторий **amnezia_web-PRO**, доступ подписчикам).
+**Нет** в интерфейсе и по API: включение/выключение peer, правка дат отключения, переименование, удаление, экспорт `.conf`, «Новый клиент под каскад», Cloudflare WARP, синхронизация времени хоста по SSH — это **[версия PRO](https://boosty.to/andrey27/purchase/3906453?ssource=DIRECT&share=subscription_link)** (приватный репозиторий **amnezia_web-PRO**, доступ подписчикам).
 
 Редакция **`community`** задаётся автоматически файлом **`.amnezia-panel-edition`** в корне репозитория (`community`) или переменной окружения **`AMNEZIA_EDITION=community`** в контейнере. Кнопка и текст про подписку настраиваются **`COMMUNITY_UPGRADE_URL`** и **`COMMUNITY_UPGRADE_PITCH`**.
 
@@ -41,7 +41,7 @@ cd /opt/amnezia-admin && chmod +x scripts/install.sh && sudo SKIP_DOWNLOAD=1 bas
 | `HOST_PORT` | `8080` | Порт панели |
 | `AWG_CONTAINER` | `amnezia-awg2` | Контейнер WG по умолчанию |
 | `AWG_PROFILES` | _(нет)_ | Несколько инстансов; см. примеры в репозитории PRO |
-| `COMMUNITY_UPGRADE_URL` | Boosty автора | Куда ведёт кнопка «Разблокировать PRO» |
+| `COMMUNITY_UPGRADE_URL` | Страница подписки PRO на Boosty (зашита в код по умолчанию) | Переопределите, если смените уровень подписки |
 | `COMMUNITY_UPGRADE_PITCH` | _(текст по умолчанию в коде)_ | Текст под заголовком базовой версии |
 | `SKIP_LANDING` | `0` | `1` — без лендинга на порту 80 |
 
