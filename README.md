@@ -66,7 +66,9 @@ cd /opt/amnezia-admin && chmod +x scripts/install.sh && sudo SKIP_DOWNLOAD=1 bas
 | `COMMUNITY_UPGRADE_PITCH` | _(текст по умолчанию в коде)_ | Текст под заголовком базовой версии |
 | `PANEL_FOOTER_DONATE_URL` | Как **`COMMUNITY_UPGRADE_URL`** | Ссылка «донат» в **шапке и подвале** веб‑панели (**не** добавляется на nginx‑лендинг пользователей). |
 | `PANEL_FOOTER_TELEGRAM_URL` | `https://t.me/lot_andrey` | Ссылка Telegram‑спонсора / канала (там же: только панель). |
+| `PANEL_FOOTER_OZON_URL` | Ссылка на **Ozon СБП** автора (дефолт в `server.js`) | Донат через Ozon — **шапка и подвал** панели с остальными ссылками. |
 | `PANEL_FOOTER_DONATE_LABEL` | `Поддержать проект` | Текст якоря доната |
+| `PANEL_FOOTER_OZON_LABEL` | `Донат · Ozon СБП` | Текст якоря Ozon |
 | `PANEL_FOOTER_TELEGRAM_LABEL` | `Telegram‑канал спонсора` | Текст якоря Telegram |
 | `PANEL_FOOTER_PROMO_SUBTITLE` | _(строка по умолчанию в коде)_ | Поясняющий текст в верхней полосе панели |
 | `SKIP_LANDING` | `0` | `1` — без лендинга на порту 80 |

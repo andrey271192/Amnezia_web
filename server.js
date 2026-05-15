@@ -70,6 +70,8 @@ const COMMUNITY_UPGRADE_PITCH =
   "В PRO: вкл/выкл клиентов, даты и расписание отключений, переименование, экспорт .conf, каскад, Cloudflare WARP, синхронизация времени хоста. В FREE: удаление клиента с сервера + отдельный раздел установки Telegram MTProto-прокси (Docker-контейнер). Полная сборка AWG-панели — приватный репозиторий amnezia_web-PRO; доступ по подписке Boosty.";
 
 const PANEL_FOOTER_TELEGRAM_DEFAULT = "https://t.me/lot_andrey";
+const PANEL_FOOTER_OZON_DEFAULT =
+  "https://finance.ozon.ru/apps/sbp/ozonbankpay/019dc200-2a5d-7931-a619-782d285f6798";
 
 function sanitizeHttpsHttpUrl(raw) {
   const s = String(raw || "").trim();
@@ -83,7 +85,7 @@ function sanitizeHttpsHttpUrl(raw) {
   return "";
 }
 
-/** Донат + Telegram‑спонсор: только в админ‑панели (не пользовательские лендинги). Переопределяется через env контейнера. */
+/** Донат + Ozon СБП + Telegram‑спонсор: только в админ‑панели (не пользовательские лендинги). Переопределяется через env контейнера. */
 function panelPromoFooterPayload() {
   const donateResolved =
     sanitizeHttpsHttpUrl(
@@ -93,18 +95,26 @@ function panelPromoFooterPayload() {
     sanitizeHttpsHttpUrl(
       process.env.PANEL_FOOTER_TELEGRAM_URL?.trim() || PANEL_FOOTER_TELEGRAM_DEFAULT,
     ) || "";
+  const ozonResolved =
+    sanitizeHttpsHttpUrl(
+      process.env.PANEL_FOOTER_OZON_URL?.trim() || PANEL_FOOTER_OZON_DEFAULT,
+    ) || "";
 
   return {
     donateUrl: donateResolved,
+    ozonUrl: ozonResolved,
     telegramUrl: telegramResolved,
     donateLabel:
       process.env.PANEL_FOOTER_DONATE_LABEL?.trim() || "Поддержать проект",
+    ozonLabel:
+      process.env.PANEL_FOOTER_OZON_LABEL?.trim() ||
+      "Донат · Ozon СБП",
     telegramLabel:
       process.env.PANEL_FOOTER_TELEGRAM_LABEL?.trim() ||
       "Telegram‑канал спонсора",
     promoSubtitle:
       process.env.PANEL_FOOTER_PROMO_SUBTITLE?.trim() ||
-      "Поддержите разработку и канал спонсора — ссылки есть вверху и внизу панели. На пользовательские сайты‑лендинги это не добавляется.",
+      "Поддержите через Boosty (или вашу ссылку), Ozon СБП и Telegram — те же ссылки внизу панели. На пользовательские лендинги это не выводится.",
   };
 }
 

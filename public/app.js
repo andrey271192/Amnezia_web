@@ -174,11 +174,15 @@ async function hydratePanelPromoFooter() {
   const strip = document.getElementById("panel-promo-strip");
   const sub = document.getElementById("panel-promo-subtitle");
   const aDonTop = document.getElementById("panel-strip-donate");
-  const sepTop = document.getElementById("panel-strip-sep");
+  const sepDO = document.getElementById("panel-strip-sep-donate-ozon");
+  const aOzonTop = document.getElementById("panel-strip-ozon");
+  const sepOT = document.getElementById("panel-strip-sep-ozon-tg");
   const aTgTop = document.getElementById("panel-strip-telegram");
   const gap1 = document.getElementById("footer-promo-gap1");
   const aDonF = document.getElementById("footer-promo-donate");
-  const sepMid = document.getElementById("footer-promo-sep-mid");
+  const fSepDO = document.getElementById("footer-promo-sep-donate-ozon");
+  const aOzonF = document.getElementById("footer-promo-ozon");
+  const fSepOT = document.getElementById("footer-promo-sep-ozon-tg");
   const aTgF = document.getElementById("footer-promo-telegram");
 
   try {
@@ -191,18 +195,25 @@ async function hydratePanelPromoFooter() {
     if (sub) sub.textContent = subtitle;
 
     const okD = wirePanelPromoAnchor(aDonTop, j.donateUrl, j.donateLabel);
+    const okO = wirePanelPromoAnchor(aOzonTop, j.ozonUrl, j.ozonLabel);
     const okT = wirePanelPromoAnchor(aTgTop, j.telegramUrl, j.telegramLabel);
-    if (sepTop) sepTop.classList.toggle("hidden", !(okD && okT));
+
+    if (sepDO) sepDO.classList.toggle("hidden", !(okD && (okO || okT)));
+    if (sepOT) sepOT.classList.toggle("hidden", !(okO && okT));
 
     wirePanelPromoAnchor(aDonF, j.donateUrl, j.donateLabel);
+    wirePanelPromoAnchor(aOzonF, j.ozonUrl, j.ozonLabel);
     wirePanelPromoAnchor(aTgF, j.telegramUrl, j.telegramLabel);
 
     const footerD = aDonF && !aDonF.classList.contains("hidden");
+    const footerO = aOzonF && !aOzonF.classList.contains("hidden");
     const footerT = aTgF && !aTgF.classList.contains("hidden");
-    if (gap1) gap1.classList.toggle("hidden", !(footerD || footerT));
-    if (sepMid) sepMid.classList.toggle("hidden", !(footerD && footerT));
 
-    if (strip && (okD || okT)) strip.classList.remove("hidden");
+    if (gap1) gap1.classList.toggle("hidden", !(footerD || footerO || footerT));
+    if (fSepDO) fSepDO.classList.toggle("hidden", !(footerD && (footerO || footerT)));
+    if (fSepOT) fSepOT.classList.toggle("hidden", !(footerO && footerT));
+
+    if (strip && (okD || okO || okT)) strip.classList.remove("hidden");
   } catch {
     /* офлайн или сбой — блок остаётся скрытым */
   }

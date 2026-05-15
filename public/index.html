@@ -7,7 +7,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;600;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/styles.css?v=1.2.21">
+  <link rel="stylesheet" href="/styles.css?v=1.2.22">
   <script>
     (function () {
       try {
@@ -28,7 +28,9 @@
       <p id="panel-promo-subtitle" class="panel-promo-subtitle muted"></p>
       <div class="panel-promo-links">
         <a id="panel-strip-donate" class="panel-promo-a hidden" target="_blank" rel="noopener noreferrer"></a>
-        <span id="panel-strip-sep" class="panel-promo-sep hidden" aria-hidden="true">·</span>
+        <span id="panel-strip-sep-donate-ozon" class="panel-promo-sep hidden" aria-hidden="true">·</span>
+        <a id="panel-strip-ozon" class="panel-promo-a hidden" target="_blank" rel="noopener noreferrer"></a>
+        <span id="panel-strip-sep-ozon-tg" class="panel-promo-sep hidden" aria-hidden="true">·</span>
         <a id="panel-strip-telegram" class="panel-promo-a hidden" target="_blank" rel="noopener noreferrer"></a>
       </div>
     </div>
@@ -159,7 +161,7 @@
       <div class="panel-fold-body">
         <p class="muted warp-intro mtproto-intro">
           <strong>В базовой панели (FREE).</strong> Отдельный Docker‑контейнер (образ Telegram), публикация порта на хосте VPS.
-          Ссылка вида <code class="inline">tg://proxy?…</code> появляется, если задан <code class="inline">MTPRO_PUBLIC_HOST</code> или <code class="inline">CLIENT_CONFIG_ENDPOINT</code>
+          Ссылка вида <code class="inline">tg://proxy?…</code> может появляться без env, если панель открыта по публичному IP/DNS; для фиксированного хоста задайте <code class="inline">MTPRO_PUBLIC_HOST</code> или <code class="inline">CLIENT_CONFIG_ENDPOINT</code>
           (переменные контейнера панели, см. install.sh README).
           Сохраните <strong>секрет</strong>, который показывается один раз после установки — в интерфейсе он маскируется.
         </p>
@@ -264,13 +266,15 @@
       <strong class="support-title">amnezia_web</strong>
       <span class="support-sep" aria-hidden="true">·</span>
       <a href="https://github.com/andrey271192/amnezia_web" target="_blank" rel="noopener noreferrer">GitHub</a>
-      <span id="footer-promo-gap1" class="support-sep support-footer-promo-gap hidden" aria-hidden="true">·</span>
+      <span id="footer-promo-gap1" class="support-sep hidden" aria-hidden="true">·</span>
       <a id="footer-promo-donate" class="support-promo-link hidden" target="_blank" rel="noopener noreferrer"></a>
-      <span id="footer-promo-sep-mid" class="support-sep hidden" aria-hidden="true">·</span>
+      <span id="footer-promo-sep-donate-ozon" class="support-sep hidden" aria-hidden="true">·</span>
+      <a id="footer-promo-ozon" class="support-promo-link hidden" target="_blank" rel="noopener noreferrer"></a>
+      <span id="footer-promo-sep-ozon-tg" class="support-sep hidden" aria-hidden="true">·</span>
       <a id="footer-promo-telegram" class="support-promo-link hidden" target="_blank" rel="noopener noreferrer"></a>
     </div>
     <p class="support-blurb">
-      Базовая панель: AWG‑клиенты, статусы и MTProto‑прокси (Docker). Ссылки поддержки автора только в этом интерфейсе панели, не на отдельных пользовательских лендингах.
+      Базовая панель: AWG‑клиенты, статусы и MTProto‑прокси (Docker). Ссылки поддержки (Boosty, Ozon СБП, Telegram) подставляются из настроек сервера — только в этом интерфейсе, не на пользовательских лендингах.
     </p>
   </footer>
 
@@ -308,6 +312,6 @@
     </div>
   </dialog>
 
-  <script src="/app.js?v=1.2.21" type="module"></script>
+  <script src="/app.js?v=1.2.22" type="module"></script>
 </body>
 </html>
