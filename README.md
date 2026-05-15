@@ -1,25 +1,5 @@
 # amnezia_web
 
-> Где поддержать: [Boosty (донат)](https://boosty.to/andrey27/donate) · [Boosty (уровень PRO)](https://boosty.to/andrey27/purchase/3906453?ssource=DIRECT&share=subscription_link) · [Ozon СБП](https://finance.ozon.ru/apps/sbp/ozonbankpay/019dc200-2a5d-7931-a619-782d285f6798) · [Telegram @lot_andrey](https://t.me/lot_andrey) · [**GitHub** ↗](https://github.com/andrey271192/amnezia_web)
-
-## Поддержка проекта
-
----
-
-- ⭐ **GitHub:** [andrey271192/amnezia_web](https://github.com/andrey271192/amnezia_web)
-- 💖 **Boosty:** [boosty.to/andrey27/donate](https://boosty.to/andrey27/donate)
-- 💳 **Ozon Bank (СБП):** [ссылка](https://finance.ozon.ru/apps/sbp/ozonbankpay/019dc200-2a5d-7931-a619-782d285f6798)
-- ✉️ **Telegram:** [@lot_andrey](https://t.me/lot_andrey)
-
-Открытая **базовая** веб-панель для **просмотра** клиентов **AmneziaWG** на своём VPS: таблица клиентов, статус «в туннеле», AllowedIPs, несколько инстансов через **`AWG_PROFILES`**, часы сервера и браузера. В редакции **FREE/community** можно **удалить** клиента с сервера (peer и строка в таблице).  
-**Нет** в интерфейсе и по API в FREE: включение/выключение peer, правка дат отключения, переименование, экспорт `.conf`, «Новый клиент под каскад», Cloudflare WARP, синхронизация времени хоста по SSH — это **[версия PRO](https://boosty.to/andrey27/purchase/3906453?ssource=DIRECT&share=subscription_link)** (приватный репозиторий **amnezia_web-PRO**, доступ подписчикам).
-
-**Редакция по умолчанию в этом репозитории — FREE (**`community`**, файл **`.amnezia-panel-edition`**). **Поле для GitHub‑токена и кнопка «Установить PRO»** в баннере сверху **включены по умолчанию** (до явного **`ALLOW_COMMUNITY_GITHUB_ACTIVATION=0|false|no|off`** в переменных контейнера). Переменная **`INSTALL_FREE_COMMUNITY_ACTIVATION=1`** при установке дополнительно создаёт **`${DATA_DIR}/.install-free-github-pro-opt-in`** и пробрасывает **`ALLOW_COMMUNITY_GITHUB_ACTIVATION=1`** в следующие запуски **`install.sh`** — удобно, когда админ уже отключил UI раньше, но хочет снова зафиксировать «разрешено» через том. Тексты Boosty и заголовков настраиваются **`COMMUNITY_UPGRADE_URL`** и **`COMMUNITY_UPGRADE_PITCH`**.
-
-**Безопасность:** доступ к Docker-сокету в контейнере панели эквивалентен root на хосте — используйте сложный пароль и ограничьте доступ по IP / TLS. **Любой** вошедший администратор FREE может запустить приватный `install.sh`, пока возможность не отключена **`ALLOW_COMMUNITY_GITHUB_ACTIVATION=0`** (и перезапуском контейнера). Если маркера **`.install-free-github-pro-opt-in`** в томе нет и переменную не задают заново при апдейте, сервер всё равно показывает поле (**по умолчанию**) — маркер остаётся опцией совместимости и для явного экспорта в `docker run`.
-
-Справочник по типичным сбоям и API (в т.ч. для PRO): в полной документации репозитория PRO.
-
 ## Скриншоты
 
 В редакции FREE сверху панели отображается жёлтый блок «базовая версия» и меньше кнопок, чем в PRO (см. список ограничений выше); общая разметка и таблица клиентов сохраняются.
@@ -193,3 +173,14 @@ curl -fsSL https://raw.githubusercontent.com/andrey271192/amnezia_web/main/scrip
 ## Лицензия
 
 MIT — см. [LICENSE](LICENSE).
+
+---
+
+## Поддержка проекта
+
+---
+
+- ⭐ **GitHub:** [andrey271192/amnezia_web](https://github.com/andrey271192/amnezia_web)
+- 💖 **Boosty:** [boosty.to/andrey27/donate](https://boosty.to/andrey27/donate)
+- 💳 **Ozon Bank (СБП):** [ссылка](https://finance.ozon.ru/apps/sbp/ozonbankpay/019dc200-2a5d-7931-a619-782d285f6798)
+- ✉️ **Telegram:** [@lot_andrey](https://t.me/lot_andrey)
