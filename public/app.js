@@ -28,6 +28,7 @@ const mtprotoLogsTailEl = document.querySelector("#mtproto-logs-tail");
 const mtprotoBanner = document.querySelector("#mtproto-banner");
 const mtprotoHostPortInput = document.querySelector("#mtproto-host-port");
 const mtprotoSecretInput = document.querySelector("#mtproto-secret-opt");
+const mtprotoCalloutEl = document.querySelector("#mtproto-callout");
 
 const cascadePanel = document.querySelector("#cascade-panel");
 const usersPanel = document.querySelector("#users-panel");
@@ -357,6 +358,10 @@ async function refreshMtprotoPanel() {
   if (!mtprotoPanel || !mtprotoStatusLine || !mtprotoActionsEl) return;
   if (uiHidden.mtproto) {
     mtprotoPanel.hidden = true;
+    if (mtprotoCalloutEl) {
+      mtprotoCalloutEl.textContent = "";
+      mtprotoCalloutEl.classList.add("hidden");
+    }
     return;
   }
   mtprotoPanel.hidden = false;
@@ -370,6 +375,20 @@ async function refreshMtprotoPanel() {
     if (mtprotoLogsTailEl) {
       mtprotoLogsTailEl.textContent =
         typeof snap.logsTail === "string" ? snap.logsTail : "";
+    }
+
+    if (mtprotoCalloutEl) {
+      if (snap.exists) {
+        const hp =
+          snap.hostPort != null && snap.hostPort !== "" ? String(snap.hostPort) : null;
+        mtprotoCalloutEl.classList.remove("hidden");
+        mtprotoCalloutEl.textContent = hp
+          ? `Официальный образ слушает 443/tcp внутри контейнера — это норма. На хост проброшен порт ${hp}: в Telegram указывайте публичный IP/DNS этого VPS и порт ${hp}. В логах ниже официальный прокси сам пишет tg:// и port=443 (внутренний процесс); при таком пробросе в клиенте используйте порт ${hp}, а не 443. Ссылку из синего блока панели (если показана) можно открыть как есть.`
+          : `Официальный образ слушает 443/tcp внутри контейнера; снаружи — порт хоста из строки статуса («порт хоста»). Если в логах видно tg:// с port=443, для подключения с интернета подставляйте порт хоста из статуса, не 443.`;
+      } else {
+        mtprotoCalloutEl.textContent = "";
+        mtprotoCalloutEl.classList.add("hidden");
+      }
     }
 
     const parts = [];
@@ -484,6 +503,10 @@ async function refreshMtprotoPanel() {
 
     mtprotoActionsEl.appendChild(row);
   } catch (e) {
+    if (mtprotoCalloutEl) {
+      mtprotoCalloutEl.textContent = "";
+      mtprotoCalloutEl.classList.add("hidden");
+    }
     if (mtprotoLogsTailEl) mtprotoLogsTailEl.textContent = "";
     const err = document.createElement("p");
     err.className = "muted warp-muted err";

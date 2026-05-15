@@ -7,7 +7,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;600;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/styles.css">
+  <link rel="stylesheet" href="/styles.css?v=1.2.19">
 </head>
 <body class="page">
   <div id="login-gate" class="gate hidden" aria-hidden="true">
@@ -131,6 +131,7 @@
           (переменные контейнера панели, см. install.sh README).
           Сохраните <strong>секрет</strong>, который показывается один раз после установки — в интерфейсе он маскируется.
         </p>
+        <p id="mtproto-callout" class="mtproto-callout hidden" role="note"></p>
         <div class="mtproto-fields">
           <label for="mtproto-host-port">Порт хоста (необязательно — по умолчанию см. MTPRO_PUBLISH_PORT, обычно 8443)</label>
           <input id="mtproto-host-port" type="number" min="512" max="65535" autocomplete="off" placeholder="8443 или другой свободный порт">
@@ -261,6 +262,6 @@
     </div>
   </dialog>
 
-  <script src="/app.js?v=1.2.18" type="module"></script>
+  <script src="/app.js?v=1.2.19" type="module"></script>
 </body>
 </html>
