@@ -7,6 +7,16 @@ import { fileURLToPath } from "url";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
+/** Из package.json — для мониторинга и проверки, что VPS подняли свежий образ. */
+let PANEL_VERSION = "0.0.0";
+try {
+  const raw = fs.readFileSync(path.join(__dirname, "package.json"), "utf8");
+  const v = JSON.parse(raw)?.version;
+  if (typeof v === "string" && v.trim()) PANEL_VERSION = v.trim();
+} catch {
+  /* оставить PANEL_VERSION по умолчанию */
+}
+
 const PORT = Number(process.env.PORT || 3980);
 const PROFILE_COOKIE = "amnezia_prof";
 const SCHEDULER_MS = Number(process.env.SCHEDULE_DISCONNECT_MS || 60_000);
@@ -2102,7 +2112,7 @@ app.get("/api/community/install-log", requireAuth, (req, res) => {
 });
 
 app.get("/health", (_req, res) => {
-  res.json({ ok: true });
+  res.json({ ok: true, version: PANEL_VERSION });
 });
 
 app.get("/api/session", (req, res) => {
@@ -2983,7 +2993,7 @@ app.use((_req, res) => {
 
 app.listen(PORT, "0.0.0.0", () => {
   const summary = PROFILES.map((p) => `${p.label}→${p.container}`).join("; ");
-  console.log(`amnezia-admin on :${PORT} · ${summary} · data:${DATA_DIR}`);
+  console.log(`amnezia-admin v${PANEL_VERSION} on :${PORT} · ${summary} · data:${DATA_DIR}`);
 });
 
 setInterval(() => {

@@ -366,39 +366,42 @@ async function refreshMtprotoPanel() {
     mtprotoBanner.textContent = "";
   }
   try {
-    const s = await api("/api/mtproto/status");
-    if (mtprotoLogsTailEl) mtprotoLogsTailEl.textContent = typeof s.logsTail === "string" ? s.logsTail : "";
+    const snap = await api("/api/mtproto/status");
+    if (mtprotoLogsTailEl) {
+      mtprotoLogsTailEl.textContent =
+        typeof snap.logsTail === "string" ? snap.logsTail : "";
+    }
 
     const parts = [];
-    if (s.exists) parts.push("контейнер есть");
-    if (s.running) parts.push("запущен");
+    if (snap.exists) parts.push("контейнер есть");
+    if (snap.running) parts.push("запущен");
     mtprotoStatusLine.textContent =
       parts.length > 0
         ? parts.join(" · ") +
-          (s.hostPort ? ` · порт хоста :${String(s.hostPort)}` : "") +
-          (s.secretMasked ? ` · секрет ${s.secretMasked}` : "")
+          (snap.hostPort ? ` · порт хоста :${String(snap.hostPort)}` : "") +
+          (snap.secretMasked ? ` · секрет ${snap.secretMasked}` : "")
         : "не установлен";
 
-    if (typeof s.hint === "string" && s.hint.trim()) {
+    if (typeof snap.hint === "string" && snap.hint.trim()) {
       const hintEl = document.createElement("p");
       hintEl.className = "muted warp-muted";
-      hintEl.textContent = s.hint.trim();
+      hintEl.textContent = snap.hint.trim();
       mtprotoActionsEl.appendChild(hintEl);
-    } else if (s.exists && !s.running && typeof s.image === "string" && s.image.trim()) {
+    } else if (snap.exists && !snap.running && typeof snap.image === "string" && snap.image.trim()) {
       const imgHint = document.createElement("p");
       imgHint.className = "muted warp-muted";
-      imgHint.textContent = `После установки образ будет доступен здесь (${s.image.trim()} при актуальной конфигурации).`;
+      imgHint.textContent = `После установки образ будет доступен здесь (${snap.image.trim()} при актуальной конфигурации).`;
       mtprotoActionsEl.appendChild(imgHint);
     }
 
-    if (s.tgLink) {
+    if (snap.tgLink) {
       const link = document.createElement("div");
       link.className = "mtproto-deep-link muted warp-muted";
       const lab = document.createElement("strong");
       lab.textContent = "Ссылка в Telegram: ";
       const a = document.createElement("a");
-      a.href = s.tgLink;
-      a.textContent = s.tgLink;
+      a.href = snap.tgLink;
+      a.textContent = snap.tgLink;
       a.target = "_blank";
       a.rel = "noopener noreferrer";
       link.append(lab, a);
