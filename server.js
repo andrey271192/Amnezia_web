@@ -2259,7 +2259,6 @@ app.post("/api/mtproto/install", requireAuth, (req, res) => {
       hostPort,
       tgLink,
       advertisedHost: adv,
-      advertiseHint: adv ? "" : "Задайте MTPRO_PUBLIC_HOST — иначе в Telegram нужно самим ввести IP и порт из таблицы.",
       snapshot: snap,
     });
   } finally {

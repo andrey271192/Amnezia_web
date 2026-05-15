@@ -366,6 +366,7 @@ async function refreshMtprotoPanel() {
     mtprotoBanner.textContent = "";
   }
   try {
+    const s = await api("/api/mtproto/status");
     if (mtprotoLogsTailEl) mtprotoLogsTailEl.textContent = typeof s.logsTail === "string" ? s.logsTail : "";
 
     const parts = [];
@@ -423,7 +424,6 @@ async function refreshMtprotoPanel() {
           const lines = [];
           if (typeof j.secretHex === "string") lines.push(`Секрет (сохраните): ${j.secretHex}`);
           if (typeof j.tgLink === "string" && j.tgLink) lines.push(`Ссылка: ${j.tgLink}`);
-          if (typeof j.advertiseHint === "string" && j.advertiseHint) lines.push(j.advertiseHint);
           if (mtprotoBanner) {
             mtprotoBanner.textContent = lines.join("\n");
             mtprotoBanner.classList.remove("hidden");
@@ -481,6 +481,7 @@ async function refreshMtprotoPanel() {
 
     mtprotoActionsEl.appendChild(row);
   } catch (e) {
+    if (mtprotoLogsTailEl) mtprotoLogsTailEl.textContent = "";
     const err = document.createElement("p");
     err.className = "muted warp-muted err";
     err.textContent = String(e.message || e);
