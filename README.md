@@ -91,7 +91,7 @@ cd /opt/amnezia-admin && chmod +x scripts/install.sh && sudo SKIP_DOWNLOAD=1 bas
 | `UI_HIDE_MTPROTO` | _(не задано)_ | `1` или **`UI_HIDE_SECTIONS=...,mtproto`** — скрыть раздел установки MTProto в веб‑интерфейсе (по умолчанию виден даже FREE). |
 | `FREE_PANEL_CONTAINER_FOR_PRO_INSTALL` и др. | см. `server.js` | Имена контейнеров для `docker rm` перед install (по умолчанию `amnezia-admin`, `amnezia-web-landing`, `amnezia-admin-pro`). |
 
-Примечание для MTProto на панели: **`GET /api/mtproto/status`** отдаёт состояние и **`tg://` без синхронного `docker logs`**; хвост логов подгружается вторым запросом **`GET /api/mtproto/logs`**, чтобы блок со ссылкой открывался быстрее.
+**MTProto‑прокси и API панели:** **`GET /api/mtproto/status`** отдаёт состояние контейнера и ссылку **`tg://`** без тяжёлых операций при открытии блока. Опционально **`GET /api/mtproto/status?withLogs=1`** добавляет в ответ хвост **`docker logs`** (поле **`logsFetched`**). Отдельные эндпоинты: **`GET /api/mtproto/logs`** и **`GET /api/mtproto/tail`** (тот же смысл, если обратный прокси режет URI с **`logs`**). За nginx/Caddy перед панелью нужно пробрасывать **весь** префикс **`/api/`** одним правилом — см. блок **«Not found»** в **«Частые проблемы»** ниже.
 
 Чтобы включить форму установки из панели после «обычной» установки без **`INSTALL_FREE…`**, задайте в контейнере **`AMNEZIA_EDITION=community`** и **`ALLOW_COMMUNITY_GITHUB_ACTIVATION=1`** (или проще переустановите с **`INSTALL_FREE_COMMUNITY_ACTIVATION=1`**). URL приватного `install.sh` при необходимости переопределите через **`COMMUNITY_PRIVATE_INSTALL_SCRIPT_URL`**.
 
@@ -154,6 +154,10 @@ curl -fsSL https://raw.githubusercontent.com/andrey271192/amnezia_web/main/scrip
 ### Лендинг: порт 80 занят
 
 Если на хосте уже что-то слушает **TCP 80**, установщик сообщит об этом и, при дефолтном **`LANDING_PORT=80`**, сам попробует другой свободный порт (обычно начиная с **8081**). Либо явно: **`LANDING_PORT=8083`**, либо **`SKIP_LANDING=1`**.
+
+### Раздел MTProto или вся панель: ошибка «Not found», API не отвечает
+
+Чаще всего браузер бьётся не в **Node**‑процесс панели, а в **прокси** (nginx и т.п.) с неполным маппингом: **`/api/mtproto/*`**, **`/api/clients`** и остальное должны уходить на тот же upstream, что и **`/`** панели. Должен проксироваться **любой** путь под **`/api/`**, а не только отдельные location. На самой VPS **`curl -fsS http://127.0.0.1:ПОРТ_ПАНЕЛИ/health`** должен вернуть JSON с **`version`**. Если с localhost работает, а через домен — **404**, смотрите конфигурацию обратного прокси и TLS.
 
 ### AmneziaWG Legacy: удаление клиента не срабатывает (`wg0.conf is world accessible` / `No such device`)
 
