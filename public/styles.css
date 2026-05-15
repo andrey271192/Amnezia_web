@@ -340,6 +340,27 @@ h1 {
   margin-bottom: 0.75rem;
 }
 
+.gate-donate {
+  margin-top: 1rem;
+  padding-top: 0.9rem;
+  border-top: 1px dashed rgba(148, 163, 184, 0.45);
+  font-size: 0.84rem;
+  line-height: 1.65;
+}
+
+.gate-donate a {
+  color: var(--accent);
+  font-weight: 650;
+  white-space: nowrap;
+}
+
+.gate-donate-dot {
+  display: inline-block;
+  opacity: 0.45;
+  margin: 0 0.2rem;
+  user-select: none;
+}
+
 .btn.full {
   width: 100%;
   margin-top: 0.25rem;

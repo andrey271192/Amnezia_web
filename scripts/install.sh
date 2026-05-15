@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Установка Amnezia Admin WebUI одной командой (см. README).
-# Клиентский режим: INSTALL_FREE_COMMUNITY_ACTIVATION=1 — FREE-панель + поле GitHub и «Установить PRO».
+# Клиентский режим: INSTALL_FREE_COMMUNITY_ACTIVATION=1 — маркер в томе данных + явно включает ALLOW в контейнере (поле PAT в FREE и так включено по умолчанию в server.js).
 set -euo pipefail
 
 GITHUB_REPO="${GITHUB_REPO:-andrey271192/amnezia_web}"

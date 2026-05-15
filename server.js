@@ -29,6 +29,14 @@ function envTruthy(v) {
   return s === "1" || s === "true" || s === "yes";
 }
 
+/** Явное отключение поля GitHub‑токена / установки PRO из UI (`0`, `false`, `no`, `off`). Пустое или неизвестное — не отключает. */
+function communityGithubActivationDisabledByEnv() {
+  const v = process.env.ALLOW_COMMUNITY_GITHUB_ACTIVATION;
+  if (typeof v !== "string") return false;
+  const s = v.trim().toLowerCase();
+  return s === "0" || s === "false" || s === "no" || s === "off";
+}
+
 /** Какие блоки веб-интерфейса скрыты: `UI_HIDE_SECTIONS=users,warp,cascade` или `UI_HIDE_USERS` и т.д. */
 function resolveUiHidden() {
   const raw = process.env.UI_HIDE_SECTIONS?.trim();
@@ -51,7 +59,9 @@ const UI_HIDDEN = resolveUiHidden();
 
 const AMNEZIA_EDITION = (process.env.AMNEZIA_EDITION || "pro").trim().toLowerCase();
 const IS_COMMUNITY = AMNEZIA_EDITION === "community";
-const ALLOW_COMMUNITY_GITHUB_ACTIVATION = envTruthy(process.env.ALLOW_COMMUNITY_GITHUB_ACTIVATION);
+/** В редакции FREE поле для PAT и установка из панели включены по умолчанию; выключить: `ALLOW_COMMUNITY_GITHUB_ACTIVATION=0` (или `false`/`no`/`off`). */
+const ALLOW_COMMUNITY_GITHUB_ACTIVATION =
+  IS_COMMUNITY && !communityGithubActivationDisabledByEnv();
 const COMMUNITY_PRIVATE_INSTALL_SCRIPT_URL =
   process.env.COMMUNITY_PRIVATE_INSTALL_SCRIPT_URL?.trim() ||
   "https://raw.githubusercontent.com/andrey271192/amnezia_web-pro/main/scripts/install.sh";
@@ -1837,7 +1847,11 @@ if (IS_COMMUNITY) {
 }
 if (ALLOW_COMMUNITY_GITHUB_ACTIVATION && IS_COMMUNITY) {
   console.warn(
-    "Разрешена установка PRO из UI (ALLOW_COMMUNITY_GITHUB_ACTIVATION): GitHub-токен не сохранять в журналах; защитите доступ к паролю панели и Docker-сокету.",
+    "Установка PRO из панели включена (по умолчанию в FREE). Отключить: ALLOW_COMMUNITY_GITHUB_ACTIVATION=0. GitHub-токен не сохранять в журналах; ограничьте доступ к паролю панели и Docker-сокету.",
+  );
+} else if (IS_COMMUNITY) {
+  console.warn(
+    "Установка PRO из панели отключена: ALLOW_COMMUNITY_GITHUB_ACTIVATION=0|false|no|off.",
   );
 }
 app.use(express.json({ limit: "512kb" }));

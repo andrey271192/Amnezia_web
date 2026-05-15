@@ -213,9 +213,9 @@ async function hydratePanelPromoFooter() {
     if (fSepDO) fSepDO.classList.toggle("hidden", !(footerD && (footerO || footerT)));
     if (fSepOT) fSepOT.classList.toggle("hidden", !(footerO && footerT));
 
-    if (strip && (okD || okO || okT)) strip.classList.remove("hidden");
+    if (strip) strip.classList.remove("hidden");
   } catch {
-    /* офлайн или сбой — блок остаётся скрытым */
+    /* офлайн или сбой — в HTML уже дефолтные ссылки шапки/подвала */
   }
 }
 
@@ -420,7 +420,7 @@ function applyEditionPayload(data) {
         hint.className = "edition-banner-no-activation muted";
         hint.setAttribute("role", "note");
         hint.textContent =
-          "Строки для GitHub‑токена нет специально: эта возможность была отключена при установке FREE. Чтобы она появилась здесь под кнопкой Boosty — переустановите панель с INSTALL_FREE_COMMUNITY_ACTIVATION=1 (README, раздел «Установка для клиента»), либо задайте ALLOW_COMMUNITY_GITHUB_ACTIVATION=1 в переменных контейнера; также помогает файл .install-free-github-pro-opt-in в каталоге данных панели и повторный запуск install.sh.";
+          "Владелец сервера отключил установку PRO из интерфейса (в контейнере задано ALLOW_COMMUNITY_GITHUB_ACTIVATION=0 или экв.). Уберите переменную или поставьте 1/true — и перезапустите контейнер панели.";
         editionBanner.appendChild(hint);
       }
     } else {
