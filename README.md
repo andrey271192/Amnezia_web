@@ -65,9 +65,10 @@
 <img src="docs/screenshots/panel-users-table.png" alt="Панель: пользователи AmneziaWG, выбор инстанса, время, статусы в туннеле" width="780"/>
 <br/><br/>
 <img src="docs/screenshots/panel-overview-password.png" alt="Панель: заголовок, подсказки, форма смены пароля" width="780"/>
+<br/><br/>
+<img src="https://i.postimg.cc/8CFFLhKN/Snimok-ekrana-2026-05-15-v-11-45-37.png"
 </p>
-https://i.postimg.cc/8CFFLhKN/Snimok-ekrana-2026-05-15-v-11-45-37.png
-Файлы можно заменить своими PNG с теми же именами.
+
 
 ---
 
