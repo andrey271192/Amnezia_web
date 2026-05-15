@@ -7,9 +7,20 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;600;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/styles.css?v=1.2.19">
+  <link rel="stylesheet" href="/styles.css?v=1.2.20">
 </head>
 <body class="page">
+  <aside id="panel-promo-strip" class="panel-promo-strip hidden" role="complementary" aria-label="Поддержка проекта">
+    <div class="panel-promo-strip-inner">
+      <p id="panel-promo-subtitle" class="panel-promo-subtitle muted"></p>
+      <div class="panel-promo-links">
+        <a id="panel-strip-donate" class="panel-promo-a hidden" target="_blank" rel="noopener noreferrer"></a>
+        <span id="panel-strip-sep" class="panel-promo-sep hidden" aria-hidden="true">·</span>
+        <a id="panel-strip-telegram" class="panel-promo-a hidden" target="_blank" rel="noopener noreferrer"></a>
+      </div>
+    </div>
+  </aside>
+
   <div id="login-gate" class="gate hidden" aria-hidden="true">
     <div class="gate-card">
       <p class="eyebrow">Панель сервера</p>
@@ -222,9 +233,13 @@
       <strong class="support-title">amnezia_web</strong>
       <span class="support-sep" aria-hidden="true">·</span>
       <a href="https://github.com/andrey271192/amnezia_web" target="_blank" rel="noopener noreferrer">GitHub</a>
+      <span id="footer-promo-gap1" class="support-sep support-footer-promo-gap hidden" aria-hidden="true">·</span>
+      <a id="footer-promo-donate" class="support-promo-link hidden" target="_blank" rel="noopener noreferrer"></a>
+      <span id="footer-promo-sep-mid" class="support-sep hidden" aria-hidden="true">·</span>
+      <a id="footer-promo-telegram" class="support-promo-link hidden" target="_blank" rel="noopener noreferrer"></a>
     </div>
     <p class="support-blurb">
-      Базовая панель: AWG‑клиенты, статусы и MTProto‑прокси (Docker) без сторонней интеграции Telegram‑ботов.
+      Базовая панель: AWG‑клиенты, статусы и MTProto‑прокси (Docker). Ссылки поддержки автора только в этом интерфейсе панели, не на отдельных пользовательских лендингах.
     </p>
   </footer>
 
@@ -262,6 +277,6 @@
     </div>
   </dialog>
 
-  <script src="/app.js?v=1.2.19" type="module"></script>
+  <script src="/app.js?v=1.2.20" type="module"></script>
 </body>
 </html>

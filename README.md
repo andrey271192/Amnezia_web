@@ -64,6 +64,11 @@ cd /opt/amnezia-admin && chmod +x scripts/install.sh && sudo SKIP_DOWNLOAD=1 bas
 | `AWG_PROFILES` | _(нет)_ | Несколько инстансов; см. примеры в репозитории PRO |
 | `COMMUNITY_UPGRADE_URL` | Страница подписки PRO на Boosty (зашита в код по умолчанию) | Переопределите, если смените уровень подписки |
 | `COMMUNITY_UPGRADE_PITCH` | _(текст по умолчанию в коде)_ | Текст под заголовком базовой версии |
+| `PANEL_FOOTER_DONATE_URL` | Как **`COMMUNITY_UPGRADE_URL`** | Ссылка «донат» в **шапке и подвале** веб‑панели (**не** добавляется на nginx‑лендинг пользователей). |
+| `PANEL_FOOTER_TELEGRAM_URL` | `https://t.me/lot_andrey` | Ссылка Telegram‑спонсора / канала (там же: только панель). |
+| `PANEL_FOOTER_DONATE_LABEL` | `Поддержать проект` | Текст якоря доната |
+| `PANEL_FOOTER_TELEGRAM_LABEL` | `Telegram‑канал спонсора` | Текст якоря Telegram |
+| `PANEL_FOOTER_PROMO_SUBTITLE` | _(строка по умолчанию в коде)_ | Поясняющий текст в верхней полосе панели |
 | `SKIP_LANDING` | `0` | `1` — без лендинга на порту 80 |
 | `ALLOW_COMMUNITY_GITHUB_ACTIVATION` | `0` | `1` — в редакции community показывать ввод GitHub-токена и запускать приватный `install.sh` (доступ к репо с Contents Read / repo; **высокая чувствительность**, см. раздел безопасности) |
 | `COMMUNITY_PRIVATE_INSTALL_SCRIPT_URL` | `https://raw.githubusercontent.com/andrey271192/amnezia_web-pro/main/scripts/install.sh` | Сырой URL `scripts/install.sh` в **вашем** приватном репозитории PRO |

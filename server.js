@@ -69,6 +69,45 @@ const COMMUNITY_UPGRADE_PITCH =
   process.env.COMMUNITY_UPGRADE_PITCH?.trim() ||
   "В PRO: вкл/выкл клиентов, даты и расписание отключений, переименование, экспорт .conf, каскад, Cloudflare WARP, синхронизация времени хоста. В FREE: удаление клиента с сервера + отдельный раздел установки Telegram MTProto-прокси (Docker-контейнер). Полная сборка AWG-панели — приватный репозиторий amnezia_web-PRO; доступ по подписке Boosty.";
 
+const PANEL_FOOTER_TELEGRAM_DEFAULT = "https://t.me/lot_andrey";
+
+function sanitizeHttpsHttpUrl(raw) {
+  const s = String(raw || "").trim();
+  if (!s) return "";
+  try {
+    const u = new URL(s);
+    if (u.protocol === "http:" || u.protocol === "https:") return u.href;
+  } catch {
+    /* ignore */
+  }
+  return "";
+}
+
+/** Донат + Telegram‑спонсор: только в админ‑панели (не пользовательские лендинги). Переопределяется через env контейнера. */
+function panelPromoFooterPayload() {
+  const donateResolved =
+    sanitizeHttpsHttpUrl(
+      process.env.PANEL_FOOTER_DONATE_URL?.trim() || COMMUNITY_UPGRADE_URL.trim(),
+    ) || "";
+  const telegramResolved =
+    sanitizeHttpsHttpUrl(
+      process.env.PANEL_FOOTER_TELEGRAM_URL?.trim() || PANEL_FOOTER_TELEGRAM_DEFAULT,
+    ) || "";
+
+  return {
+    donateUrl: donateResolved,
+    telegramUrl: telegramResolved,
+    donateLabel:
+      process.env.PANEL_FOOTER_DONATE_LABEL?.trim() || "Поддержать проект",
+    telegramLabel:
+      process.env.PANEL_FOOTER_TELEGRAM_LABEL?.trim() ||
+      "Telegram‑канал спонсора",
+    promoSubtitle:
+      process.env.PANEL_FOOTER_PROMO_SUBTITLE?.trim() ||
+      "Поддержите разработку и канал спонсора — ссылки есть вверху и внизу панели. На пользовательские сайты‑лендинги это не добавляется.",
+  };
+}
+
 function editionPayload() {
   return {
     tier: IS_COMMUNITY ? "community" : "pro",
@@ -2113,6 +2152,11 @@ app.get("/api/community/install-log", requireAuth, (req, res) => {
 
 app.get("/health", (_req, res) => {
   res.json({ ok: true, version: PANEL_VERSION });
+});
+
+/** Публичные ссылки доната / Telegram‑спонсора для интерфейса панели (без авторизации). */
+app.get("/api/panel/footer", (_req, res) => {
+  res.json(panelPromoFooterPayload());
 });
 
 app.get("/api/session", (req, res) => {

@@ -147,6 +147,62 @@ function fmtBytesRu(n) {
   return `${Math.round(x / (1024 * 102.4)) / 10} MiB`;
 }
 
+/** Ссылки доната и Telegram‑спонсора: шапка + подвал панели (`GET /api/panel/footer`). */
+function wirePanelPromoAnchor(el, url, label) {
+  const u = typeof url === "string" ? url.trim() : "";
+  const lb = typeof label === "string" ? label.trim() : "";
+  if (!el || !u || !lb) {
+    if (el) {
+      el.classList.add("hidden");
+      el.removeAttribute("href");
+      el.textContent = "";
+    }
+    return false;
+  }
+  el.href = u;
+  el.textContent = lb;
+  el.classList.remove("hidden");
+  return true;
+}
+
+async function hydratePanelPromoFooter() {
+  const strip = document.getElementById("panel-promo-strip");
+  const sub = document.getElementById("panel-promo-subtitle");
+  const aDonTop = document.getElementById("panel-strip-donate");
+  const sepTop = document.getElementById("panel-strip-sep");
+  const aTgTop = document.getElementById("panel-strip-telegram");
+  const gap1 = document.getElementById("footer-promo-gap1");
+  const aDonF = document.getElementById("footer-promo-donate");
+  const sepMid = document.getElementById("footer-promo-sep-mid");
+  const aTgF = document.getElementById("footer-promo-telegram");
+
+  try {
+    const r = await fetch("/api/panel/footer", { credentials: "same-origin" });
+    if (!r.ok) return;
+    const j = await r.json().catch(() => null);
+    if (!j || typeof j !== "object") return;
+
+    const subtitle = typeof j.promoSubtitle === "string" ? j.promoSubtitle.trim() : "";
+    if (sub) sub.textContent = subtitle;
+
+    const okD = wirePanelPromoAnchor(aDonTop, j.donateUrl, j.donateLabel);
+    const okT = wirePanelPromoAnchor(aTgTop, j.telegramUrl, j.telegramLabel);
+    if (sepTop) sepTop.classList.toggle("hidden", !(okD && okT));
+
+    wirePanelPromoAnchor(aDonF, j.donateUrl, j.donateLabel);
+    wirePanelPromoAnchor(aTgF, j.telegramUrl, j.telegramLabel);
+
+    const footerD = aDonF && !aDonF.classList.contains("hidden");
+    const footerT = aTgF && !aTgF.classList.contains("hidden");
+    if (gap1) gap1.classList.toggle("hidden", !(footerD || footerT));
+    if (sepMid) sepMid.classList.toggle("hidden", !(footerD && footerT));
+
+    if (strip && (okD || okT)) strip.classList.remove("hidden");
+  } catch {
+    /* офлайн или сбой — блок остаётся скрытым */
+  }
+}
+
 function ensureEditionBannerInstallLogPanel() {
   if (!editionBanner) return null;
   let wrap = editionBanner.querySelector(".edition-banner-install-log");
@@ -1603,4 +1659,5 @@ async function boot() {
   }
 }
 
+void hydratePanelPromoFooter();
 boot();
