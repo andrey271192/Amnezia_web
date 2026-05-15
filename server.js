@@ -2169,6 +2169,7 @@ app.get("/api/protocols", requireAuth, (req, res) => {
     singleProfile: PROFILES.length < 2,
     profilesPersistHint: hintSingle,
     edition: editionPayload(),
+    uiHidden: { ...effectiveUiHidden() },
   });
 });
 

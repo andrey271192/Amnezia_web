@@ -575,6 +575,7 @@ async function loadProtocols() {
   try {
     const data = await api("/api/protocols");
     applyEditionPayload(data);
+    applyUiHiddenFromPayload(data);
     protoLabel.textContent = `Протокол: ${data.currentLabel || "AmneziaWG"}`;
     if (profileHintEl) {
       if (data.singleProfile && typeof data.profilesPersistHint === "string" && data.profilesPersistHint) {
