@@ -236,10 +236,17 @@ for __warp_var in WARP_DIR WARP_CONF_PATH WARP_CLIENTS_LIST AMNEZIA_START_SCRIPT
   fi
 done
 
-for __panel_env_var in UI_HIDE_SECTIONS UI_HIDE_USERS UI_HIDE_WARP UI_HIDE_CASCADE \
+for __panel_env_var in UI_HIDE_SECTIONS UI_HIDE_USERS UI_HIDE_WARP UI_HIDE_CASCADE UI_HIDE_MTPROTO \
   EXPORT_CONFIG_SECRET CLIENT_CONFIG_ENDPOINT CLIENT_EXPORT_DNS1 CLIENT_EXPORT_DNS2; do
   if [[ -n "${!__panel_env_var:-}" ]]; then
     RUN_ENV+=( -e "${__panel_env_var}=${!__panel_env_var}" )
+  fi
+done
+
+for __mt_vars in MTPRO_PROXY_CONTAINER MTPRO_PROXY_IMAGE MTPRO_INTERNAL_PORT MTPRO_PUBLISH_PORT \
+  MTPRO_PUBLISH_BIND MTPRO_PUBLIC_HOST; do
+  if [[ -n "${!__mt_vars:-}" ]]; then
+    RUN_ENV+=( -e "${__mt_vars}=${!__mt_vars}" )
   fi
 done
 

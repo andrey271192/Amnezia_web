@@ -21,6 +21,14 @@ const warpActionsEl = document.querySelector("#warp-actions");
 const warpClientListEl = document.querySelector("#warp-client-list");
 const warpWgShowEl = document.querySelector("#warp-wg-show");
 
+const mtprotoPanel = document.querySelector("#mtproto-panel");
+const mtprotoStatusLine = document.querySelector("#mtproto-status-line");
+const mtprotoActionsEl = document.querySelector("#mtproto-actions");
+const mtprotoLogsTailEl = document.querySelector("#mtproto-logs-tail");
+const mtprotoBanner = document.querySelector("#mtproto-banner");
+const mtprotoHostPortInput = document.querySelector("#mtproto-host-port");
+const mtprotoSecretInput = document.querySelector("#mtproto-secret-opt");
+
 const cascadePanel = document.querySelector("#cascade-panel");
 const usersPanel = document.querySelector("#users-panel");
 const wgRawDetails = document.querySelector("#wg-raw-details");
@@ -58,7 +66,7 @@ const warpSshErr = document.querySelector("#warp-ssh-err");
 let warpSshPendingCmd = null;
 
 /** Какие панели скрыты настройкой сервера (`UI_HIDE_SECTIONS`). */
-let uiHidden = { users: false, warp: false, cascade: false };
+let uiHidden = { users: false, warp: false, cascade: false, mtproto: false };
 
 const editionBanner = document.querySelector("#edition-banner");
 const DEFAULT_HEADER_SUB = document.querySelector(".top .sub")?.textContent?.trim() || "";
@@ -234,7 +242,7 @@ function applyEditionPayload(data) {
   if (subEl) {
     if (editionState.tier === "community") {
       subEl.textContent =
-        "Базовая панель amnezia_web: просмотр клиентов и статусов, а также удаление клиента с сервера. Включение/выключение туннеля, даты, переименование, экспорт .conf, каскад, Cloudflare WARP и синхронизация времени хоста — в версии PRO.";
+        "Базовая панель amnezia_web: просмотр клиентов и статусов, удаление клиента с сервера, установка Telegram MTProto‑прокси (Docker) в этом интерфейсе. Включение/выключение туннеля, даты, переименование, экспорт .conf, каскад, Cloudflare WARP и синхронизация времени хоста — в версии PRO.";
     } else {
       subEl.textContent = DEFAULT_HEADER_SUB;
     }
@@ -345,6 +353,141 @@ function applyEditionPayload(data) {
   if (wgRawDetails) wgRawDetails.hidden = uiHidden.users || !editionState.showDebugWg;
 }
 
+async function refreshMtprotoPanel() {
+  if (!mtprotoPanel || !mtprotoStatusLine || !mtprotoActionsEl) return;
+  if (uiHidden.mtproto) {
+    mtprotoPanel.hidden = true;
+    return;
+  }
+  mtprotoPanel.hidden = false;
+  mtprotoActionsEl.innerHTML = "";
+  if (mtprotoBanner) {
+    mtprotoBanner.classList.add("hidden");
+    mtprotoBanner.textContent = "";
+  }
+  try {
+    if (mtprotoLogsTailEl) mtprotoLogsTailEl.textContent = typeof s.logsTail === "string" ? s.logsTail : "";
+
+    const parts = [];
+    if (s.exists) parts.push("контейнер есть");
+    if (s.running) parts.push("запущен");
+    mtprotoStatusLine.textContent =
+      parts.length > 0
+        ? parts.join(" · ") +
+          (s.hostPort ? ` · порт хоста :${String(s.hostPort)}` : "") +
+          (s.secretMasked ? ` · секрет ${s.secretMasked}` : "")
+        : "не установлен";
+
+    if (typeof s.hint === "string" && s.hint.trim()) {
+      const hintEl = document.createElement("p");
+      hintEl.className = "muted warp-muted";
+      hintEl.textContent = s.hint.trim();
+      mtprotoActionsEl.appendChild(hintEl);
+    } else if (s.exists && !s.running && typeof s.image === "string" && s.image.trim()) {
+      const imgHint = document.createElement("p");
+      imgHint.className = "muted warp-muted";
+      imgHint.textContent = `После установки образ будет доступен здесь (${s.image.trim()} при актуальной конфигурации).`;
+      mtprotoActionsEl.appendChild(imgHint);
+    }
+
+    if (s.tgLink) {
+      const link = document.createElement("div");
+      link.className = "mtproto-deep-link muted warp-muted";
+      const lab = document.createElement("strong");
+      lab.textContent = "Ссылка в Telegram: ";
+      const a = document.createElement("a");
+      a.href = s.tgLink;
+      a.textContent = s.tgLink;
+      a.target = "_blank";
+      a.rel = "noopener noreferrer";
+      link.append(lab, a);
+      mtprotoActionsEl.appendChild(link);
+    }
+
+    const row = document.createElement("div");
+    row.className = "warp-actions";
+
+    row.appendChild(
+      btn("Установить / пересоздать", "btn small primary", async () => {
+        try {
+          setStatus("MTProto: docker pull/run…", false);
+          const hp = mtprotoHostPortInput?.value?.trim();
+          const sec = mtprotoSecretInput?.value?.trim()?.toLowerCase();
+          const body = {};
+          if (hp !== "" && hp !== undefined) {
+            const n = Number.parseInt(String(hp), 10);
+            if (Number.isFinite(n)) body.hostPort = n;
+          }
+          if (/^[a-f0-9]{32}$/.test(sec)) body.secret = sec;
+          const j = await api("/api/mtproto/install", { method: "POST", body: JSON.stringify(body) });
+          const lines = [];
+          if (typeof j.secretHex === "string") lines.push(`Секрет (сохраните): ${j.secretHex}`);
+          if (typeof j.tgLink === "string" && j.tgLink) lines.push(`Ссылка: ${j.tgLink}`);
+          if (typeof j.advertiseHint === "string" && j.advertiseHint) lines.push(j.advertiseHint);
+          if (mtprotoBanner) {
+            mtprotoBanner.textContent = lines.join("\n");
+            mtprotoBanner.classList.remove("hidden");
+          }
+          if (typeof j.secretHex === "string" && mtprotoSecretInput) mtprotoSecretInput.value = "";
+          await refreshMtprotoPanel();
+          setStatus("MTProto: готово", false);
+        } catch (e) {
+          setStatus(String(e?.message || e), true);
+        }
+      }),
+    );
+
+    row.appendChild(
+      btn("Перезапустить", "btn small ghost", async () => {
+        try {
+          setStatus("MTProto: перезапуск…", false);
+          await api("/api/mtproto/restart", { method: "POST", body: JSON.stringify({}) });
+          await refreshMtprotoPanel();
+          setStatus("", false);
+        } catch (e) {
+          setStatus(String(e?.message || e), true);
+        }
+      }),
+    );
+
+    row.appendChild(
+      btn("Удалить прокси", "btn small warn", async () => {
+        try {
+          if (!confirm("Удалить контейнер MTProto? Секрет в Telegram сохранять не нужно — он пересоздастся заново при установке.")) return;
+          setStatus("MTProto: удаление…", false);
+          await api("/api/mtproto/remove", { method: "POST", body: JSON.stringify({}) });
+          if (mtprotoBanner) {
+            mtprotoBanner.classList.add("hidden");
+            mtprotoBanner.textContent = "";
+          }
+          await refreshMtprotoPanel();
+          setStatus("", false);
+        } catch (e) {
+          setStatus(String(e?.message || e), true);
+        }
+      }),
+    );
+
+    row.appendChild(
+      btn("Обновить статус", "btn small ghost", async () => {
+        try {
+          setStatus("", false);
+          await refreshMtprotoPanel();
+        } catch (e) {
+          setStatus(String(e?.message || e), true);
+        }
+      }),
+    );
+
+    mtprotoActionsEl.appendChild(row);
+  } catch (e) {
+    const err = document.createElement("p");
+    err.className = "muted warp-muted err";
+    err.textContent = String(e.message || e);
+    mtprotoActionsEl.appendChild(err);
+  }
+}
+
 function applyUiHiddenFromPayload(data) {
   const u = data?.uiHidden;
   if (u && typeof u === "object") {
@@ -352,11 +495,15 @@ function applyUiHiddenFromPayload(data) {
       users: Boolean(u.users),
       warp: Boolean(u.warp),
       cascade: Boolean(u.cascade),
+      mtproto: Boolean(u.mtproto),
     };
   }
   if (usersPanel) usersPanel.hidden = uiHidden.users;
   if (wgRawDetails) wgRawDetails.hidden = uiHidden.users || !editionState.showDebugWg;
   if (cascadePanel) cascadePanel.hidden = uiHidden.cascade;
+  if (warpPanel) warpPanel.hidden = uiHidden.warp;
+  if (mtprotoPanel) mtprotoPanel.hidden = uiHidden.mtproto;
+  void refreshMtprotoPanel();
 }
 
 let dtMode = "disable";
@@ -1412,6 +1559,7 @@ async function loadClients() {
     wgShowEl.textContent = "";
     peerCountEl.textContent = "";
     if (warpPanel) warpPanel.hidden = true;
+    if (mtprotoPanel) mtprotoPanel.hidden = true;
   }
 }
 

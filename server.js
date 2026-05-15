@@ -1,5 +1,5 @@
 import express from "express";
-import { spawn, execFileSync } from "child_process";
+import { spawn, spawnSync, execFileSync } from "child_process";
 import crypto from "crypto";
 import path from "path";
 import fs from "fs";
@@ -33,6 +33,7 @@ function resolveUiHidden() {
     users: set.has("users") || envTruthy(process.env.UI_HIDE_USERS),
     warp: set.has("warp") || envTruthy(process.env.UI_HIDE_WARP),
     cascade: set.has("cascade") || envTruthy(process.env.UI_HIDE_CASCADE),
+    mtproto: set.has("mtproto") || envTruthy(process.env.UI_HIDE_MTPROTO),
   };
 }
 
@@ -56,7 +57,7 @@ const COMMUNITY_UPGRADE_URL =
   "https://boosty.to/andrey27/purchase/3906453?ssource=DIRECT&share=subscription_link";
 const COMMUNITY_UPGRADE_PITCH =
   process.env.COMMUNITY_UPGRADE_PITCH?.trim() ||
-  "В PRO: вкл/выкл клиентов, даты и расписание отключений, переименование, экспорт .conf, каскад, Cloudflare WARP, синхронизация времени хоста. В FREE можно удалять клиента с сервера (peer и строка в таблице). Полная сборка — приватный репозиторий amnezia_web-PRO; доступ по подписке Boosty.";
+  "В PRO: вкл/выкл клиентов, даты и расписание отключений, переименование, экспорт .conf, каскад, Cloudflare WARP, синхронизация времени хоста. В FREE: удаление клиента с сервера + отдельный раздел установки Telegram MTProto-прокси (Docker-контейнер). Полная сборка AWG-панели — приватный репозиторий amnezia_web-PRO; доступ по подписке Boosty.";
 
 function editionPayload() {
   return {
@@ -77,6 +78,7 @@ function effectiveUiHidden() {
     users: UI_HIDDEN.users,
     warp: true,
     cascade: true,
+    mtproto: UI_HIDDEN.mtproto,
   };
 }
 
@@ -392,8 +394,8 @@ function requireAuthOrExportToken(req, res, next) {
 
 function rejectCommunityProOnly(res) {
   res.status(403).json({
-    error:
-      "Доступно в версии PRO: управление клиентами, экспорт .conf, каскад, Cloudflare WARP и синхронизация времени хоста.",
+      error:
+        "Доступно в версии PRO: полное управление клиентами, экспорт .conf, каскад, Cloudflare WARP и синхронизация времени хоста. Раздел MTProto‑прокси Telegram (Docker) в базовой панели уже без PRO.",
     upgradeRequired: true,
     upgradeUrl: COMMUNITY_UPGRADE_URL,
   });
@@ -1598,11 +1600,137 @@ bootstrapPassword();
 const MSG_UI_WARP_OFF = "Раздел Cloudflare WARP отключён на этом сервере (UI_HIDE_SECTIONS / UI_HIDE_WARP).";
 const MSG_UI_CASCADE_OFF =
   "Каскад отключён на этом сервере (UI_HIDE_SECTIONS / UI_HIDE_CASCADE).";
+const MSG_UI_MTProto_OFF = "Раздел MTProto отключён (UI_HIDE_SECTIONS включает mtproto или задан UI_HIDE_MTPROTO=1).";
+
+const MTPRO_CONTAINER = (process.env.MTPRO_PROXY_CONTAINER || "mtproto-proxy").trim();
+const MTPRO_IMAGE = (process.env.MTPRO_PROXY_IMAGE || "telegrammessenger/proxy:latest").trim();
+const MTPRO_INTERNAL_PORT = Number(process.env.MTPRO_INTERNAL_PORT || 443) || 443;
+const MTPRO_PUBLISH_PORT_DEFAULT = (() => {
+  const n = Number.parseInt(process.env.MTPRO_PUBLISH_PORT || "8443", 10);
+  return Number.isFinite(n) && n > 0 ? n : 8443;
+})();
+const MTPRO_PUBLISH_BIND = (process.env.MTPRO_PUBLISH_BIND || "0.0.0.0").trim() || "0.0.0.0";
+
+let mtprotoInstallBusy = false;
+
+function dockerSpawnSync(args, timeoutMs = 180_000) {
+  const r = spawnSync("docker", args, {
+    encoding: "utf8",
+    maxBuffer: 5 * 1024 * 1024,
+    timeout: timeoutMs,
+    stdio: ["ignore", "pipe", "pipe"],
+  });
+  return {
+    code: typeof r.status === "number" ? r.status : 1,
+    stdout: String(r.stdout || ""),
+    stderr: String(r.stderr || ""),
+  };
+}
+
+function envArrayToMap(envArr) {
+  const out = {};
+  if (!Array.isArray(envArr)) return out;
+  for (const line of envArr) {
+    const i = line.indexOf("=");
+    if (i <= 0) continue;
+    out[line.slice(0, i)] = line.slice(i + 1);
+  }
+  return out;
+}
+
+function mtprotoParsedInspect() {
+  const r = dockerSpawnSync(["inspect", MTPRO_CONTAINER], 20_000);
+  if (r.code !== 0) return null;
+  try {
+    const arr = JSON.parse(r.stdout);
+    return arr?.[0] ?? null;
+  } catch {
+    return null;
+  }
+}
+
+function mtprotoHostPort(ins) {
+  const key = `${MTPRO_INTERNAL_PORT}/tcp`;
+  const bind = ins?.HostConfig?.PortBindings?.[key];
+  if (Array.isArray(bind) && bind[0]?.HostPort) return String(bind[0].HostPort);
+  const ex = ins?.NetworkSettings?.Ports?.[key];
+  if (Array.isArray(ex) && ex[0]?.HostPort) return String(ex[0].HostPort);
+  return null;
+}
+
+function mtprotoAdvertisedHost() {
+  const a =
+    process.env.MTPRO_PUBLIC_HOST?.trim() ||
+    process.env.CLIENT_CONFIG_ENDPOINT?.trim();
+  return a || "";
+}
+
+function mtprotoMaskedSecret(secret) {
+  const s = String(secret || "").trim();
+  if (s.length < 10) return "········";
+  return `········${s.slice(-6)}`;
+}
+
+function mtprotoTelegramDeepLink(host, port, secretHex) {
+  const h = String(host || "").trim();
+  const p = Number(port);
+  const sec = String(secretHex || "").trim();
+  if (!h || !Number.isFinite(p) || !sec) return "";
+  try {
+    return `tg://proxy?server=${encodeURIComponent(h)}&port=${encodeURIComponent(String(p))}&secret=${encodeURIComponent(sec)}`;
+  } catch {
+    return "";
+  }
+}
+
+function mtprotoNormalizeSecret(hex) {
+  const s = String(hex || "").trim().toLowerCase();
+  if (/^[0-9a-f]{32}$/.test(s)) return s;
+  return "";
+}
+
+function mtprotoSnapshot() {
+  const ins = mtprotoParsedInspect();
+  if (!ins) {
+    return {
+      exists: false,
+      running: false,
+      container: MTPRO_CONTAINER,
+      image: MTPRO_IMAGE,
+      hostPort: null,
+      advertisedHost: mtprotoAdvertisedHost(),
+      secretMasked: "",
+      tgLink: "",
+      hint: "Контейнер не найден — нажмите «Установить».",
+    };
+  }
+  const state = String(ins?.State?.Status || "").toLowerCase();
+  const running = state === "running";
+  const cfg = ins?.Config || {};
+  const envMap = envArrayToMap(cfg?.Env);
+  const secret = envMap.SECRET || "";
+  const hostPort = mtprotoHostPort(ins);
+  const adv = mtprotoAdvertisedHost();
+  return {
+    exists: true,
+    running,
+    container: MTPRO_CONTAINER,
+    image: String(cfg?.Image || MTPRO_IMAGE),
+    hostPort,
+    advertisedHost: adv,
+    secretMasked: secret ? mtprotoMaskedSecret(secret) : "",
+    tgLink: mtprotoTelegramDeepLink(adv, Number(hostPort || 0), secret),
+    restartCount: Number(ins?.RestartCount || 0) || 0,
+    hint: adv
+      ? ""
+      : "Задайте MTPRO_PUBLIC_HOST или CLIENT_CONFIG_ENDPOINT на IP/DNS VPS — тогда появится прямая ссылка tg:// для клиентов.",
+  };
+}
 
 const app = express();
-if (UI_HIDDEN.users || UI_HIDDEN.warp || UI_HIDDEN.cascade) {
+if (UI_HIDDEN.users || UI_HIDDEN.warp || UI_HIDDEN.cascade || UI_HIDDEN.mtproto) {
   console.warn(
-    `UI_HIDDEN: users=${UI_HIDDEN.users} warp=${UI_HIDDEN.warp} cascade=${UI_HIDDEN.cascade}`,
+    `UI_HIDDEN: users=${UI_HIDDEN.users} warp=${UI_HIDDEN.warp} cascade=${UI_HIDDEN.cascade} mtproto=${UI_HIDDEN.mtproto}`,
   );
 }
 if (IS_COMMUNITY) {
@@ -2030,6 +2158,143 @@ app.get("/api/time-sync-capabilities", requireAuth, (_req, res) => {
     sshHost: process.env.TIME_SYNC_SSH_HOST?.trim() || "172.17.0.1",
     serverClockTimeZone: resolveServerClockTimeZone(),
   });
+});
+
+app.get("/api/mtproto/status", requireAuth, (req, res) => {
+  if (effectiveUiHidden().mtproto) {
+    return res.status(403).json({ error: MSG_UI_MTProto_OFF });
+  }
+  const snap = mtprotoSnapshot();
+  let logsTail = "";
+  if (snap.exists && snap.running) {
+    const l = dockerSpawnSync(["logs", "--tail", "100", MTPRO_CONTAINER], 12_000);
+    if (l.code === 0) logsTail = l.stdout.trim().slice(-4500);
+  }
+  res.json({ ...snap, logsTail });
+});
+
+app.post("/api/mtproto/install", requireAuth, (req, res) => {
+  if (effectiveUiHidden().mtproto) {
+    return res.status(403).json({ error: MSG_UI_MTProto_OFF });
+  }
+  if (!/^[a-zA-Z][a-zA-Z0-9_.-]*$/.test(MTPRO_CONTAINER)) {
+    return res.status(500).json({
+      error:
+        "Некорректное имя Docker-контейнера MTProto (переменная окружения MTPRO_PROXY_CONTAINER).",
+    });
+  }
+  if (!/^[a-zA-Z0-9_.\-/:@]+$/.test(MTPRO_IMAGE)) {
+    return res.status(500).json({
+      error: "Некорректное имя образа MTProto (переменная MTPRO_PROXY_IMAGE).",
+    });
+  }
+  if (!/^[0-9.:a-fA-F]+$/.test(MTPRO_PUBLISH_BIND)) {
+    return res.status(500).json({
+      error: "Некорректный MTPRO_PUBLISH_BIND.",
+    });
+  }
+
+  let hostPort = MTPRO_PUBLISH_PORT_DEFAULT;
+  const hpReq = req.body?.hostPort;
+  if (hpReq !== undefined && hpReq !== null && hpReq !== "") {
+    const parsed = typeof hpReq === "number" ? hpReq : Number.parseInt(String(hpReq).trim(), 10);
+    if (!Number.isFinite(parsed) || parsed < 512 || parsed > 65535) {
+      return res.status(400).json({ error: "Порт (hostPort): целое 512 … 65535." });
+    }
+    hostPort = parsed;
+  }
+
+  const userSec = mtprotoNormalizeSecret(typeof req.body?.secret === "string" ? req.body.secret : "");
+  const secretFinal = userSec || crypto.randomBytes(16).toString("hex");
+
+  if (mtprotoInstallBusy) return res.status(429).json({ error: "Установка MTProto уже выполняется." });
+
+  mtprotoInstallBusy = true;
+  try {
+    const rm = dockerSpawnSync(["rm", "-f", MTPRO_CONTAINER], 120_000);
+    if (rm.code !== 0 && !/No such container/i.test(`${rm.stderr} ${rm.stdout}`)) {
+      return res.status(400).json({
+        error: `docker rm завершился с кодом ${rm.code}`,
+        stderr: rm.stderr.trim().slice(0, 2000),
+      });
+    }
+
+    const pull = dockerSpawnSync(["pull", MTPRO_IMAGE], 600_000);
+    if (pull.code !== 0) {
+      return res.status(400).json({
+        error: "Не удалось docker pull образа.",
+        stderr: `${pull.stderr || ""}${pull.stdout || ""}`.trim().slice(0, 2000),
+      });
+    }
+
+    const pub = `${MTPRO_PUBLISH_BIND}:${hostPort}:${MTPRO_INTERNAL_PORT}/tcp`;
+    const args = [
+      "run",
+      "-d",
+      "--name",
+      MTPRO_CONTAINER,
+      "--restart",
+      "unless-stopped",
+      "-p",
+      pub,
+      "-e",
+      `SECRET=${secretFinal}`,
+      MTPRO_IMAGE,
+    ];
+    const run = dockerSpawnSync(args, 120_000);
+    if (run.code !== 0) {
+      return res.status(400).json({
+        error: `docker run завершился с кодом ${run.code}`,
+        stderr: `${run.stderr}${run.stdout}`.trim().slice(0, 4000),
+      });
+    }
+
+    const adv = mtprotoAdvertisedHost();
+    const snap = mtprotoSnapshot();
+    const tgLink = mtprotoTelegramDeepLink(adv, hostPort, secretFinal);
+
+    res.json({
+      ok: true,
+      secretHex: secretFinal,
+      hostPort,
+      tgLink,
+      advertisedHost: adv,
+      advertiseHint: adv ? "" : "Задайте MTPRO_PUBLIC_HOST — иначе в Telegram нужно самим ввести IP и порт из таблицы.",
+      snapshot: snap,
+    });
+  } finally {
+    mtprotoInstallBusy = false;
+  }
+});
+
+app.post("/api/mtproto/remove", requireAuth, (_req, res) => {
+  if (effectiveUiHidden().mtproto) {
+    return res.status(403).json({ error: MSG_UI_MTProto_OFF });
+  }
+  const r = dockerSpawnSync(["rm", "-f", MTPRO_CONTAINER], 120_000);
+  if (r.code !== 0 && !/No such container/i.test(`${r.stderr} ${r.stdout}`)) {
+    return res.status(400).json({
+      error: "Не удалось удалить контейнер MTProto.",
+      stderr: `${r.stderr}${r.stdout}`.trim().slice(0, 2000),
+    });
+  }
+  res.json({ ok: true });
+});
+
+app.post("/api/mtproto/restart", requireAuth, (_req, res) => {
+  if (effectiveUiHidden().mtproto) {
+    return res.status(403).json({ error: MSG_UI_MTProto_OFF });
+  }
+  const snap = mtprotoSnapshot();
+  if (!snap.exists) return res.status(400).json({ error: "Контейнер MTProto ещё не установлен." });
+  const r = dockerSpawnSync(["restart", MTPRO_CONTAINER], 180_000);
+  if (r.code !== 0) {
+    return res.status(400).json({
+      error: `docker restart завершился с кодом ${r.code}`,
+      stderr: `${r.stderr}${r.stdout}`.trim().slice(0, 2000),
+    });
+  }
+  res.json({ ok: true });
 });
 
 app.post("/api/sync-host-time", requireAuth, requireProTier, async (req, res) => {

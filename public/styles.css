@@ -917,7 +917,44 @@ tr:last-child td {
   overflow: auto;
 }
 
-.edition-banner {
+/* --- Telegram MTProto (FREE) --- */
+.mtproto-panel .warp-intro.mtproto-intro {
+  margin-top: 0;
+}
+
+.mtproto-fields {
+  display: grid;
+  gap: 0.35rem 0.85rem;
+  max-width: 28rem;
+  margin: 0.5rem 0 1rem;
+}
+
+.mtproto-fields label {
+  font-size: 0.82rem;
+  color: var(--muted);
+}
+
+.mtproto-fields input {
+  padding: 0.45rem 0.65rem;
+  border-radius: 8px;
+  border: 1px solid var(--line);
+  background: rgba(0, 0, 0, 0.35);
+}
+
+.mtproto-deep-link strong {
+  display: inline-block;
+  margin-right: 0.35rem;
+}
+
+.mtproto-deep-link a {
+  word-break: break-all;
+}
+
+#mtproto-banner {
+  margin: 0.75rem 0 0;
+  white-space: pre-wrap;
+  font-size: 0.82rem;
+}
   margin: 0 0 1rem;
   padding: 0.85rem 1rem;
   border-radius: 14px;

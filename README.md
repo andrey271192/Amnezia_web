@@ -75,6 +75,13 @@ cd /opt/amnezia-admin && chmod +x scripts/install.sh && sudo SKIP_DOWNLOAD=1 bas
 | `COMMUNITY_SKIP_REMOVE_FREE_BEFORE_PRIVATE_PRO` | `0` | `1` — не выполнять `docker rm` FREE/лендинга перед install (если знаете, что делаете). |
 | `COMMUNITY_PRO_INSTALL_HELPER_IMAGE` | `docker:26-cli` | Образ с бинарём `docker` для фонового контейнера (нужен доступ к демону по сокету). |
 | `COMMUNITY_HELPER_SKIP_PREPARE_TOOLS` | _(не задано)_ | `1` — helper не ставит **`bash`** и **`curl`** в образе Alpine (обычно **не нужно**; без них `#!/usr/bin/env bash` или `curl` в PRO `install.sh` падают). |
+| `MTPRO_PROXY_CONTAINER` | `mtproto-proxy` | Имя контейнера MTProto‑прокси Telegram (официальный образ **telegrammessenger/proxy**, см. Dockerfile на Docker Hub). |
+| `MTPRO_PROXY_IMAGE` | `telegrammessenger/proxy:latest` | Образ **`docker pull` + `docker run`** при установке из панели (FREE/community). |
+| `MTPRO_INTERNAL_PORT` | `443` | Порт процесса **внутри** контейнера (официальный прокси слушает 443/tcp). Мапится на **`MTPRO_PUBLISH_*`**. |
+| `MTPRO_PUBLISH_PORT` | `8443` | Порт хоста VPS (**внешний**), проброшенный в контейнер. |
+| `MTPRO_PUBLISH_BIND` | `0.0.0.0` | Адрес биндинга на хосте (`-p` в Docker); при нескольких сетевых интерфейсах при необходимости уточняют. |
+| `MTPRO_PUBLIC_HOST` | _(нет)_ | Публичный IP или DNS для ссылки **`tg://proxy`** в UI; можно вместо него задать **`CLIENT_CONFIG_ENDPOINT`**. |
+| `UI_HIDE_MTPROTO` | _(не задано)_ | `1` или **`UI_HIDE_SECTIONS=...,mtproto`** — скрыть раздел установки MTProto в веб‑интерфейсе (по умолчанию виден даже FREE). |
 | `FREE_PANEL_CONTAINER_FOR_PRO_INSTALL` и др. | см. `server.js` | Имена контейнеров для `docker rm` перед install (по умолчанию `amnezia-admin`, `amnezia-web-landing`, `amnezia-admin-pro`). |
 
 Чтобы включить форму установки из панели после «обычной» установки без **`INSTALL_FREE…`**, задайте в контейнере **`AMNEZIA_EDITION=community`** и **`ALLOW_COMMUNITY_GITHUB_ACTIVATION=1`** (или проще переустановите с **`INSTALL_FREE_COMMUNITY_ACTIVATION=1`**). URL приватного `install.sh` при необходимости переопределите через **`COMMUNITY_PRIVATE_INSTALL_SCRIPT_URL`**.

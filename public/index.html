@@ -29,7 +29,7 @@
       <div>
         <p class="eyebrow">Панель сервера</p>
         <h1>Пользователи AmneziaWG FREE</h1>
-        <p class="sub">Базовая открытая панель: просмотр клиентов и статусов туннеля. Управление peer, экспорт .conf, каскад, Cloudflare WARP и синхронизация времени хоста доступны в версии PRO (ссылка в жёлтой плашке после входа).</p>
+        <p class="sub">Базовая открытая панель: просмотр клиентов AmneziaWG и (после входа) установка Telegram MTProto‑прокси в Docker без PRO. Полное управление peer, экспорт .conf, каскад, Cloudflare WARP и синхронизация времени хоста — в версии PRO.</p>
       </div>
       <div class="token-box">
         <div class="session-actions">
@@ -116,6 +116,37 @@
       </div>
     </details>
 
+    <details class="panel-fold mtproto-panel" id="mtproto-panel" hidden>
+      <summary class="fold-summary">
+        <span class="fold-arrow" aria-hidden="true"></span>
+        <span class="fold-titles">
+          <span class="fold-h">Telegram MTProto‑прокси</span>
+          <span class="muted fold-meta" id="mtproto-status-line"></span>
+        </span>
+      </summary>
+      <div class="panel-fold-body">
+        <p class="muted warp-intro mtproto-intro">
+          <strong>В базовой панели (FREE).</strong> Отдельный Docker‑контейнер (образ Telegram), публикация порта на хосте VPS.
+          Ссылка вида <code class="inline">tg://proxy?…</code> появляется, если задан <code class="inline">MTPRO_PUBLIC_HOST</code> или <code class="inline">CLIENT_CONFIG_ENDPOINT</code>
+          (переменные контейнера панели, см. install.sh README).
+          Сохраните <strong>секрет</strong>, который показывается один раз после установки — в интерфейсе он маскируется.
+        </p>
+        <div class="mtproto-fields">
+          <label for="mtproto-host-port">Порт хоста (необязательно — по умолчанию см. MTPRO_PUBLISH_PORT, обычно 8443)</label>
+          <input id="mtproto-host-port" type="number" min="512" max="65535" autocomplete="off" placeholder="8443 или другой свободный порт">
+
+          <label for="mtproto-secret-opt">Кастомный секрет hex (32 символа, необязательно)</label>
+          <input id="mtproto-secret-opt" type="text" maxlength="32" autocomplete="off" placeholder="Пусто — сгенерируется">
+        </div>
+        <div id="mtproto-actions" class="warp-actions"></div>
+        <p id="mtproto-banner" class="status ok hidden" role="status"></p>
+        <details class="raw warp-raw">
+          <summary>Хвост логов контейнера mtproto‑proxy</summary>
+          <pre id="mtproto-logs-tail"></pre>
+        </details>
+      </div>
+    </details>
+
     <details class="panel-fold cascade-panel" id="cascade-panel" open>
       <summary class="fold-summary">
         <span class="fold-arrow" aria-hidden="true"></span>
@@ -198,7 +229,7 @@
       <a href="https://t.me/lot_andrey" target="_blank" rel="noopener noreferrer">✉️ Telegram&nbsp;@lot_andrey</a>
     </div>
     <p class="support-blurb">
-      Открытая базовая сборка — просмотр клиентов и удаление записи с сервера. Полная панель PRO (приватный репозиторий) и доступ по подписке — см. Boosty и плашку в интерфейсе после входа.
+      Открытая базовая сборка — AWG клиентов, удаление с сервера, MTProto‑прокси Telegram (Docker). Остальной PRO доступ — см. Boosty и плашку в интерфейсе.
     </p>
   </footer>
 
