@@ -346,13 +346,13 @@ function applyEditionPayload(data) {
       wrap.append(textCol, cta);
       editionBanner.appendChild(wrap);
 
-      if (editionState.githubActivationAllowed) {
+      {
         const act = document.createElement("div");
         act.className = "edition-banner-activation muted";
         const cap = document.createElement("div");
         cap.className = "edition-banner-act-title";
         cap.textContent =
-          "Подписка получена и есть GitHub‑токен к приватному репозиторию? Запуск установки PRO с сервера (порт обычно сохранится; процесс см. журнал):";
+          "Есть GitHub‑токен к приватному репозиторию PRO? Вставьте ниже — установка заменит FREE на PRO (порт сохранится):";
 
         const row = document.createElement("div");
         row.className = "edition-banner-act-row";
@@ -361,7 +361,7 @@ function applyEditionPayload(data) {
         inp.type = "password";
         inp.autocomplete = "new-password";
         inp.spellcheck = false;
-        inp.placeholder = "Токен (classic: repo или fine‑grained: Contents Read)";
+        inp.placeholder = "GitHub PAT (classic: repo или fine‑grained: Contents Read)";
         inp.className = "edition-banner-act-input monospace";
 
         const go = document.createElement("button");
@@ -415,13 +415,6 @@ function applyEditionPayload(data) {
         act.append(cap, row, msg);
         if (preservedInstallLog) act.appendChild(preservedInstallLog);
         editionBanner.appendChild(act);
-      } else {
-        const hint = document.createElement("p");
-        hint.className = "edition-banner-no-activation muted";
-        hint.setAttribute("role", "note");
-        hint.textContent =
-          "Владелец сервера отключил установку PRO из интерфейса (в контейнере задано ALLOW_COMMUNITY_GITHUB_ACTIVATION=0 или экв.). Уберите переменную или поставьте 1/true — и перезапустите контейнер панели.";
-        editionBanner.appendChild(hint);
       }
     } else {
       stopCommunityInstallLogPolling();
