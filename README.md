@@ -66,7 +66,7 @@
 <br/><br/>
 <img src="docs/screenshots/panel-overview-password.png" alt="Панель: заголовок, подсказки, форма смены пароля" width="780"/>
 </p>
-
+https://i.postimg.cc/8CFFLhKN/Snimok-ekrana-2026-05-15-v-11-45-37.png
 Файлы можно заменить своими PNG с теми же именами.
 
 ---
