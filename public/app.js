@@ -415,6 +415,13 @@ function applyEditionPayload(data) {
         act.append(cap, row, msg);
         if (preservedInstallLog) act.appendChild(preservedInstallLog);
         editionBanner.appendChild(act);
+      } else {
+        const hint = document.createElement("p");
+        hint.className = "edition-banner-no-activation muted";
+        hint.setAttribute("role", "note");
+        hint.textContent =
+          "Строки для GitHub‑токена нет специально: эта возможность была отключена при установке FREE. Чтобы она появилась здесь под кнопкой Boosty — переустановите панель с INSTALL_FREE_COMMUNITY_ACTIVATION=1 (README, раздел «Установка для клиента»), либо задайте ALLOW_COMMUNITY_GITHUB_ACTIVATION=1 в переменных контейнера; также помогает файл .install-free-github-pro-opt-in в каталоге данных панели и повторный запуск install.sh.";
+        editionBanner.appendChild(hint);
       }
     } else {
       stopCommunityInstallLogPolling();

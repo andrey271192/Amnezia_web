@@ -1252,6 +1252,16 @@ tr:last-child td {
   color: var(--ok) !important;
 }
 
+.edition-banner-no-activation {
+  margin: 0.85rem 0 0;
+  padding-top: 0.75rem;
+  border-top: 1px dashed rgba(125, 211, 252, 0.28);
+  width: 100%;
+  font-size: 0.82rem;
+  line-height: 1.45;
+  max-width: 52rem;
+}
+
 .edition-banner-install-log {
   margin-top: 0.75rem;
 }
