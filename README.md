@@ -91,6 +91,8 @@ cd /opt/amnezia-admin && chmod +x scripts/install.sh && sudo SKIP_DOWNLOAD=1 bas
 | `UI_HIDE_MTPROTO` | _(не задано)_ | `1` или **`UI_HIDE_SECTIONS=...,mtproto`** — скрыть раздел установки MTProto в веб‑интерфейсе (по умолчанию виден даже FREE). |
 | `FREE_PANEL_CONTAINER_FOR_PRO_INSTALL` и др. | см. `server.js` | Имена контейнеров для `docker rm` перед install (по умолчанию `amnezia-admin`, `amnezia-web-landing`, `amnezia-admin-pro`). |
 
+Примечание для MTProto на панели: **`GET /api/mtproto/status`** отдаёт состояние и **`tg://` без синхронного `docker logs`**; хвост логов подгружается вторым запросом **`GET /api/mtproto/logs`**, чтобы блок со ссылкой открывался быстрее.
+
 Чтобы включить форму установки из панели после «обычной» установки без **`INSTALL_FREE…`**, задайте в контейнере **`AMNEZIA_EDITION=community`** и **`ALLOW_COMMUNITY_GITHUB_ACTIVATION=1`** (или проще переустановите с **`INSTALL_FREE_COMMUNITY_ACTIVATION=1`**). URL приватного `install.sh` при необходимости переопределите через **`COMMUNITY_PRIVATE_INSTALL_SCRIPT_URL`**.
 
 **Важно:** при одноразовом запуске с переменными в одной строке с `curl … | sudo bash` они **пропадают** — нужен **`export`** перед `curl` и **`sudo -E bash`**, см. блок **«Установка для клиента»** выше.

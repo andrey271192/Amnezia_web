@@ -2246,12 +2246,19 @@ app.get("/api/mtproto/status", requireAuth, (req, res) => {
     return res.status(403).json({ error: MSG_UI_MTProto_OFF });
   }
   const snap = mtprotoSnapshot(hostFromRequest(req));
-  let logsTail = "";
-  if (snap.exists && snap.running) {
-    const l = dockerSpawnSync(["logs", "--tail", "100", MTPRO_CONTAINER], 12_000);
-    if (l.code === 0) logsTail = l.stdout.trim().slice(-4500);
+  res.json({ ...snap });
+});
+
+app.get("/api/mtproto/logs", requireAuth, (req, res) => {
+  if (effectiveUiHidden().mtproto) {
+    return res.status(403).json({ error: MSG_UI_MTProto_OFF });
   }
-  res.json({ ...snap, logsTail });
+  const snap = mtprotoSnapshot(hostFromRequest(req));
+  if (!snap.exists || !snap.running) return res.json({ logsTail: "" });
+  const l = dockerSpawnSync(["logs", "--tail", "100", MTPRO_CONTAINER], 12_000);
+  let logsTail = "";
+  if (l.code === 0) logsTail = l.stdout.trim().slice(-4500);
+  res.json({ logsTail });
 });
 
 app.post("/api/mtproto/install", requireAuth, (req, res) => {

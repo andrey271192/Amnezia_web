@@ -426,6 +426,28 @@ function applyEditionPayload(data) {
   if (wgRawDetails) wgRawDetails.hidden = uiHidden.users || !editionState.showDebugWg;
 }
 
+/** @param {string} [tgLink] */
+function setMtprotoLinkCard(tgLink) {
+  const t = typeof tgLink === "string" ? tgLink.trim() : "";
+  if (!mtprotoLinkCardEl) return;
+  if (!t) {
+    mtprotoLinkCardEl.classList.add("hidden");
+    delete mtprotoLinkCardEl.dataset.tgLink;
+    if (mtprotoLinkAnchorEl) {
+      mtprotoLinkAnchorEl.removeAttribute("href");
+      mtprotoLinkAnchorEl.textContent = "";
+    }
+    return;
+  }
+  mtprotoLinkCardEl.classList.remove("hidden");
+  mtprotoLinkCardEl.dataset.tgLink = t;
+  if (mtprotoLinkAnchorEl) {
+    mtprotoLinkAnchorEl.href = t;
+    mtprotoLinkAnchorEl.textContent = t;
+  }
+  if (mtprotoLinkCopyState) mtprotoLinkCopyState.textContent = "";
+}
+
 async function refreshMtprotoPanel() {
   if (!mtprotoPanel || !mtprotoStatusLine || !mtprotoActionsEl) return;
   if (uiHidden.mtproto) {
@@ -434,6 +456,7 @@ async function refreshMtprotoPanel() {
       mtprotoCalloutEl.textContent = "";
       mtprotoCalloutEl.classList.add("hidden");
     }
+    setMtprotoLinkCard("");
     return;
   }
   mtprotoPanel.hidden = false;
@@ -443,11 +466,17 @@ async function refreshMtprotoPanel() {
     mtprotoBanner.textContent = "";
   }
   try {
+    if (mtprotoLogsTailEl) mtprotoLogsTailEl.textContent = "Загрузка логов…";
     const snap = await api("/api/mtproto/status");
-    if (mtprotoLogsTailEl) {
-      mtprotoLogsTailEl.textContent =
-        typeof snap.logsTail === "string" ? snap.logsTail : "";
-    }
+    void (async () => {
+      try {
+        const lg = await api("/api/mtproto/logs");
+        const tail = typeof lg?.logsTail === "string" ? lg.logsTail : "";
+        if (mtprotoLogsTailEl) mtprotoLogsTailEl.textContent = tail;
+      } catch {
+        if (mtprotoLogsTailEl) mtprotoLogsTailEl.textContent = "(лог не загрузился — обновите раздел позже)";
+      }
+    })();
 
     if (mtprotoCalloutEl) {
       if (snap.exists) {
@@ -485,20 +514,7 @@ async function refreshMtprotoPanel() {
       mtprotoActionsEl.appendChild(imgHint);
     }
 
-    if (mtprotoLinkCardEl) {
-      if (snap.tgLink) {
-        mtprotoLinkCardEl.classList.remove("hidden");
-        mtprotoLinkCardEl.dataset.tgLink = snap.tgLink;
-        if (mtprotoLinkAnchorEl) {
-          mtprotoLinkAnchorEl.href = snap.tgLink;
-          mtprotoLinkAnchorEl.textContent = snap.tgLink;
-        }
-        if (mtprotoLinkCopyState) mtprotoLinkCopyState.textContent = "";
-      } else {
-        mtprotoLinkCardEl.classList.add("hidden");
-        delete mtprotoLinkCardEl.dataset.tgLink;
-      }
-    }
+    setMtprotoLinkCard(snap.tgLink);
 
     const row = document.createElement("div");
     row.className = "warp-actions";
@@ -516,6 +532,7 @@ async function refreshMtprotoPanel() {
           }
           if (/^[a-f0-9]{32}$/.test(sec)) body.secret = sec;
           const j = await api("/api/mtproto/install", { method: "POST", body: JSON.stringify(body) });
+          if (typeof j.tgLink === "string" && j.tgLink.trim()) setMtprotoLinkCard(j.tgLink.trim());
           const lines = [];
           if (typeof j.secretHex === "string") lines.push(`Секрет (сохраните): ${j.secretHex}`);
           if (typeof j.tgLink === "string" && j.tgLink) lines.push(`Ссылка: ${j.tgLink}`);
@@ -580,10 +597,7 @@ async function refreshMtprotoPanel() {
       mtprotoCalloutEl.textContent = "";
       mtprotoCalloutEl.classList.add("hidden");
     }
-    if (mtprotoLinkCardEl) {
-      mtprotoLinkCardEl.classList.add("hidden");
-      delete mtprotoLinkCardEl.dataset.tgLink;
-    }
+    setMtprotoLinkCard("");
     if (mtprotoLogsTailEl) mtprotoLogsTailEl.textContent = "";
     const err = document.createElement("p");
     err.className = "muted warp-muted err";
