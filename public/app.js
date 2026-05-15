@@ -467,16 +467,23 @@ async function refreshMtprotoPanel() {
   }
   try {
     if (mtprotoLogsTailEl) mtprotoLogsTailEl.textContent = "Загрузка логов…";
-    const snap = await api("/api/mtproto/status");
-    void (async () => {
-      try {
-        const lg = await api("/api/mtproto/logs");
-        const tail = typeof lg?.logsTail === "string" ? lg.logsTail : "";
-        if (mtprotoLogsTailEl) mtprotoLogsTailEl.textContent = tail;
-      } catch {
-        if (mtprotoLogsTailEl) mtprotoLogsTailEl.textContent = "(лог не загрузился — обновите раздел позже)";
-      }
-    })();
+    const snap = await api("/api/mtproto/status?withLogs=1");
+    if (snap.logsFetched !== true && snap.exists === true && snap.running === true) {
+      void (async () => {
+        try {
+          const lg = (await api("/api/mtproto/tail").catch(() =>
+            api("/api/mtproto/logs"),
+          )) || { logsTail: "" };
+          const tail = typeof lg?.logsTail === "string" ? lg.logsTail : "";
+          if (mtprotoLogsTailEl) mtprotoLogsTailEl.textContent = tail;
+        } catch {
+          if (mtprotoLogsTailEl) mtprotoLogsTailEl.textContent = "(лог не загрузился — обновите раздел позже)";
+        }
+      })();
+    } else {
+      const tail = typeof snap.logsTail === "string" ? snap.logsTail : "";
+      if (mtprotoLogsTailEl) mtprotoLogsTailEl.textContent = tail;
+    }
 
     if (mtprotoCalloutEl) {
       if (snap.exists) {
@@ -805,6 +812,8 @@ function setPwMsg(text, isErr) {
 }
 
 async function api(path, opts = {}) {
+  const pathOnly =
+    typeof path === "string" ? path.trim().replace(/\?.*$/, "") || String(path).trim() : "";
   const res = await fetch(path, {
     ...opts,
     credentials: "same-origin",
@@ -821,7 +830,19 @@ async function api(path, opts = {}) {
     data = { raw: text };
   }
   if (!res.ok) {
-    const msg = data.error || data.raw || res.statusText;
+    let msg = typeof data.error === "string" ? data.error : "";
+    if (!msg) msg = typeof data.raw === "string" ? data.raw : "";
+    if (!msg) msg = res.statusText;
+    const hint = typeof data.hint === "string" && data.hint.trim() ? data.hint.trim() : "";
+    if (hint) {
+      msg = msg ? `${msg} — ${hint}` : hint;
+    } else if (
+      res.status === 404 &&
+      /^\/api\/mtproto\b/.test(pathOnly) &&
+      /^not\s*found\s*$/i.test(String(msg).trim())
+    ) {
+      msg = `${msg.trim()} — нет эндпоинта GET /api/mtproto/* на этом HTTP-ответчике (часто: старый образ панели, другой контейнер на вашем домене, или nginx с белым списком location вместо location /api/). Проверьте на том же хосту:порту, что панель, GET /health (поле version) и пересоберите образ amnezia-admin.`;
+    }
     throw new Error(msg);
   }
   return data;
@@ -1361,6 +1382,15 @@ function renderWarpPanel(data) {
   warpStatusLine.textContent = parts.join(" · ");
 
   const selection = new Set((w.selectedAllowedIps || []).map(String));
+  /** Адреса из старого clients.list без соответствующего peer (смена IP, другой инстанс) — иначе «Применить» шлёт мусор вроде 10.x.1/32 интерфейса сервера. */
+  const validWarpPeerIps = new Set();
+  for (const c of data.clients) {
+    if (!c.activeInConf) continue;
+    parseIpv4Cidrs(c.allowedIps).forEach((ip) => validWarpPeerIps.add(ip));
+  }
+  for (const ip of [...selection]) {
+    if (!validWarpPeerIps.has(ip)) selection.delete(ip);
+  }
 
   function redrawChecks() {
     warpClientListEl.innerHTML = "";

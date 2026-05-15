@@ -140,6 +140,7 @@
           Если WARP нужен: выход в интернет через Cloudflare для <em>выбранных</em> клиентов (правила маршрутизации и NAT в контейнере).
           Один раз на хосте VPS под root: в каталоге с репозиторием выполните <code class="inline">bash scripts/warp-amnezia.sh install</code>.
           Затем отметьте клиентов ниже и нажмите «Применить» (контейнер AWG перезапустится). Установить или удалить WARP с хоста можно кнопками ниже (пароль root по SSH — как при синхронизации времени). Убрать вручную: <code class="inline">bash scripts/warp-amnezia.sh uninstall</code> — см. README.
+          Если в шапке раздела виден выход через Cloudflare, а на устройстве проверка IP показывает не его: отправляйте нужный трафик через VPN в приложении Amnezia (часто <code class="inline">0.0.0.0/0</code> или режим «весь интернет»); иначе часть сайтов может идти в обход контейнера. После «Применить маршрутизацию» имеет смысл переподключить туннель на клиенте.
         </p>
         <div id="warp-actions" class="warp-actions"></div>
         <div id="warp-client-list" class="warp-client-list"></div>
@@ -160,7 +161,7 @@
       </summary>
       <div class="panel-fold-body">
         <p class="muted warp-intro mtproto-intro">
-          <strong>В базовой панели (FREE).</strong> Отдельный Docker‑контейнер (образ Telegram), публикация порта на хосте VPS.
+          <strong>Во всех редакциях панели (FREE и PRO).</strong> Отдельный Docker‑контейнер (образ Telegram), публикация порта на хосте VPS.
           Ссылка вида <code class="inline">tg://proxy?…</code> может появляться без env, если панель открыта по публичному IP/DNS; для фиксированного хоста задайте <code class="inline">MTPRO_PUBLIC_HOST</code> или <code class="inline">CLIENT_CONFIG_ENDPOINT</code>
           (переменные контейнера панели, см. install.sh README).
           Сохраните <strong>секрет</strong>, который показывается один раз после установки — в интерфейсе он маскируется.

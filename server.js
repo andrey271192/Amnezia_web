@@ -755,6 +755,20 @@ async function warpInterfaceUp(rt) {
   }
 }
 
+/** После `docker restart` правила iptables/ip rule живут только в патче start.sh; дублируем применение на «живом» контейнере. */
+async function waitForWarpInterface(rt, { timeoutMs = 90000, stepMs = 1500 } = {}) {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    try {
+      if (await warpInterfaceUp(rt)) return true;
+    } catch {
+      /* контейнер ещё не отвечает на exec */
+    }
+    await new Promise((r) => setTimeout(r, stepMs));
+  }
+  return false;
+}
+
 async function warpLoadSelectedIps(rt) {
   try {
     const raw = await rt.dockerReadFile(rt.profile.warpClientsList);
@@ -878,9 +892,18 @@ async function warpPatchStartSh(rt, ips) {
 async function warpPersistAndRestart(rt, selectedIps) {
   await rt.backupRemoteFiles();
   await warpSaveSelectedIps(rt, selectedIps);
-  await warpApplyRouting(rt, selectedIps);
   await warpPatchStartSh(rt, selectedIps);
   await dockerRestartContainer(rt.profile.container);
+  const needWarpRules = selectedIps.length > 0;
+  if (needWarpRules) {
+    const up = await waitForWarpInterface(rt);
+    if (!up && (await warpFileExists(rt, rt.profile.warpConf))) {
+      throw new Error(
+        "После перезапуска AWG интерфейс warp не поднялся за отведённое время. Откройте «Вывод wg show warp», нажмите «Поднять WARP», затем «Применить маршрутизацию» снова.",
+      );
+    }
+  }
+  await warpApplyRouting(rt, selectedIps);
 }
 
 function activePeerAllowedIpSet(conf) {
@@ -2241,24 +2264,44 @@ app.get("/api/time-sync-capabilities", requireAuth, (_req, res) => {
   });
 });
 
+function mtprotoLogsTailPayload(req) {
+  const snap = mtprotoSnapshot(hostFromRequest(req));
+  if (!snap.exists || !snap.running) return { logsTail: "" };
+  const l = dockerSpawnSync(["logs", "--tail", "100", MTPRO_CONTAINER], 12_000);
+  let logsTail = "";
+  if (l.code === 0) logsTail = l.stdout.trim().slice(-4500);
+  return { logsTail };
+}
+
 app.get("/api/mtproto/status", requireAuth, (req, res) => {
   if (effectiveUiHidden().mtproto) {
     return res.status(403).json({ error: MSG_UI_MTProto_OFF });
   }
   const snap = mtprotoSnapshot(hostFromRequest(req));
-  res.json({ ...snap });
+  const withLogs =
+    typeof req.query.withLogs === "string" &&
+    (req.query.withLogs === "1" || req.query.withLogs === "");
+  if (!withLogs) {
+    res.json({ ...snap });
+    return;
+  }
+  const { logsTail } = mtprotoLogsTailPayload(req);
+  res.json({ ...snap, logsTail, logsFetched: true });
 });
 
 app.get("/api/mtproto/logs", requireAuth, (req, res) => {
   if (effectiveUiHidden().mtproto) {
     return res.status(403).json({ error: MSG_UI_MTProto_OFF });
   }
-  const snap = mtprotoSnapshot(hostFromRequest(req));
-  if (!snap.exists || !snap.running) return res.json({ logsTail: "" });
-  const l = dockerSpawnSync(["logs", "--tail", "100", MTPRO_CONTAINER], 12_000);
-  let logsTail = "";
-  if (l.code === 0) logsTail = l.stdout.trim().slice(-4500);
-  res.json({ logsTail });
+  res.json(mtprotoLogsTailPayload(req));
+});
+
+/** Алиас к `/logs` (редко нужен для обхода прокси, где путь содержит `logs` фильтруется). */
+app.get("/api/mtproto/tail", requireAuth, (req, res) => {
+  if (effectiveUiHidden().mtproto) {
+    return res.status(403).json({ error: MSG_UI_MTProto_OFF });
+  }
+  res.json(mtprotoLogsTailPayload(req));
 });
 
 app.post("/api/mtproto/install", requireAuth, (req, res) => {
@@ -3068,7 +3111,16 @@ if (fs.existsSync(pub)) {
   );
 }
 
-app.use((_req, res) => {
+app.use((req, res) => {
+  if (typeof req.path === "string" && req.path.startsWith("/api/")) {
+    res.status(404).json({
+      error: "Not found",
+      path: `${req.originalUrl || req.path}`,
+      hint:
+        "Эндпоинта нет на этом процессе. Проверьте версию приложения через GET /health на том же хосту:порту, что панель, и что HTTP-прокси (если есть) проксирует префикс /api/*. После перехода на PRO пересоберите образ amnezia-admin из актуального релиза репозитория.",
+    });
+    return;
+  }
   res.status(404).send("Not found");
 });
 
