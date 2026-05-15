@@ -1714,6 +1714,15 @@ function mtprotoAdvertisedHost() {
   return a || "";
 }
 
+/** Хост из заголовка запроса (без :порт) — фоллбек, когда env не заданы и пользователь открыл панель по IP/DNS. */
+function hostFromRequest(req) {
+  const raw = String(req?.headers?.host || "").trim();
+  if (!raw) return "";
+  const bare = raw.replace(/^\[/, "").replace(/\]:\d+$/, "]").replace(/:\d+$/, "");
+  if (!bare || /^(localhost|127\.|0\.0\.0\.0|::1?$)/i.test(bare)) return "";
+  return bare;
+}
+
 function mtprotoMaskedSecret(secret) {
   const s = String(secret || "").trim();
   if (s.length < 10) return "········";
@@ -1738,8 +1747,13 @@ function mtprotoNormalizeSecret(hex) {
   return "";
 }
 
-function mtprotoSnapshot() {
+function mtprotoSnapshot(fallbackHost = "") {
   const ins = mtprotoParsedInspect();
+  const advEnv = mtprotoAdvertisedHost();
+  const advFallback = String(fallbackHost || "").trim();
+  const advEffective = advEnv || advFallback;
+  const advSource = advEnv ? "env" : advFallback ? "request" : "";
+
   if (!ins) {
     return {
       exists: false,
@@ -1747,7 +1761,8 @@ function mtprotoSnapshot() {
       container: MTPRO_CONTAINER,
       image: MTPRO_IMAGE,
       hostPort: null,
-      advertisedHost: mtprotoAdvertisedHost(),
+      advertisedHost: advEffective,
+      advertisedHostSource: advSource,
       secretMasked: "",
       tgLink: "",
       hint: "Контейнер не найден — нажмите «Установить».",
@@ -1759,20 +1774,22 @@ function mtprotoSnapshot() {
   const envMap = envArrayToMap(cfg?.Env);
   const secret = envMap.SECRET || "";
   const hostPort = mtprotoHostPort(ins);
-  const adv = mtprotoAdvertisedHost();
   return {
     exists: true,
     running,
     container: MTPRO_CONTAINER,
     image: String(cfg?.Image || MTPRO_IMAGE),
     hostPort,
-    advertisedHost: adv,
+    advertisedHost: advEffective,
+    advertisedHostSource: advSource,
     secretMasked: secret ? mtprotoMaskedSecret(secret) : "",
-    tgLink: mtprotoTelegramDeepLink(adv, Number(hostPort || 0), secret),
+    tgLink: mtprotoTelegramDeepLink(advEffective, Number(hostPort || 0), secret),
     restartCount: Number(ins?.RestartCount || 0) || 0,
-    hint: adv
+    hint: advEnv
       ? ""
-      : "Задайте MTPRO_PUBLIC_HOST или CLIENT_CONFIG_ENDPOINT на IP/DNS VPS — тогда появится прямая ссылка tg:// для клиентов.",
+      : advFallback
+        ? `Хост ${advFallback} взят из адреса, по которому открыта эта панель. Чтобы зафиксировать публичный IP/DNS, задайте MTPRO_PUBLIC_HOST или CLIENT_CONFIG_ENDPOINT в контейнере панели.`
+        : "Задайте MTPRO_PUBLIC_HOST или CLIENT_CONFIG_ENDPOINT на IP/DNS VPS — тогда появится прямая ссылка tg:// для клиентов.",
   };
 }
 
@@ -2218,7 +2235,7 @@ app.get("/api/mtproto/status", requireAuth, (req, res) => {
   if (effectiveUiHidden().mtproto) {
     return res.status(403).json({ error: MSG_UI_MTProto_OFF });
   }
-  const snap = mtprotoSnapshot();
+  const snap = mtprotoSnapshot(hostFromRequest(req));
   let logsTail = "";
   if (snap.exists && snap.running) {
     const l = dockerSpawnSync(["logs", "--tail", "100", MTPRO_CONTAINER], 12_000);
@@ -2303,16 +2320,19 @@ app.post("/api/mtproto/install", requireAuth, (req, res) => {
       });
     }
 
-    const adv = mtprotoAdvertisedHost();
-    const snap = mtprotoSnapshot();
-    const tgLink = mtprotoTelegramDeepLink(adv, hostPort, secretFinal);
+    const fallback = hostFromRequest(req);
+    const advEnv = mtprotoAdvertisedHost();
+    const advEffective = advEnv || fallback;
+    const snap = mtprotoSnapshot(fallback);
+    const tgLink = mtprotoTelegramDeepLink(advEffective, hostPort, secretFinal);
 
     res.json({
       ok: true,
       secretHex: secretFinal,
       hostPort,
       tgLink,
-      advertisedHost: adv,
+      advertisedHost: advEffective,
+      advertisedHostSource: advEnv ? "env" : fallback ? "request" : "",
       snapshot: snap,
     });
   } finally {

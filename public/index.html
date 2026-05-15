@@ -7,7 +7,20 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;600;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/styles.css?v=1.2.20">
+  <link rel="stylesheet" href="/styles.css?v=1.2.21">
+  <script>
+    (function () {
+      try {
+        var saved = localStorage.getItem("amnezia.theme");
+        var t = saved === "light" || saved === "dark" ? saved : "auto";
+        var resolved = t === "auto"
+          ? (window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light")
+          : t;
+        document.documentElement.setAttribute("data-theme-pref", t);
+        document.documentElement.setAttribute("data-theme", resolved);
+      } catch (e) {}
+    })();
+  </script>
 </head>
 <body class="page">
   <aside id="panel-promo-strip" class="panel-promo-strip hidden" role="complementary" aria-label="Поддержка проекта">
@@ -43,6 +56,14 @@
         <p class="sub">Базовая открытая панель: просмотр клиентов AmneziaWG и (после входа) установка Telegram MTProto‑прокси в Docker без PRO. Полное управление peer, экспорт .conf, каскад, Cloudflare WARP и синхронизация времени хоста — в версии PRO.</p>
       </div>
       <div class="token-box">
+        <div class="theme-switch" role="group" aria-label="Тема оформления">
+          <label for="theme-select" class="theme-switch-label muted">Тема</label>
+          <select id="theme-select" class="theme-select" aria-label="Тема оформления">
+            <option value="auto">Системная</option>
+            <option value="light">Светлая</option>
+            <option value="dark">Тёмная</option>
+          </select>
+        </div>
         <div class="session-actions">
           <button type="button" id="logout" class="btn ghost full">Выйти</button>
         </div>
@@ -143,6 +164,16 @@
           Сохраните <strong>секрет</strong>, который показывается один раз после установки — в интерфейсе он маскируется.
         </p>
         <p id="mtproto-callout" class="mtproto-callout hidden" role="note"></p>
+        <div id="mtproto-link-card" class="mtproto-link-card hidden" role="region" aria-label="Ссылка для Telegram">
+          <div class="mtproto-link-row">
+            <strong class="mtproto-link-label">Ссылка в Telegram</strong>
+            <a id="mtproto-link-anchor" class="mtproto-link-anchor" target="_blank" rel="noopener noreferrer"></a>
+          </div>
+          <div class="mtproto-link-row mtproto-link-actions">
+            <button type="button" id="mtproto-link-copy" class="btn small ghost">Скопировать</button>
+            <span id="mtproto-link-copy-state" class="muted warp-muted"></span>
+          </div>
+        </div>
         <div class="mtproto-fields">
           <label for="mtproto-host-port">Порт хоста (необязательно — по умолчанию см. MTPRO_PUBLISH_PORT, обычно 8443)</label>
           <input id="mtproto-host-port" type="number" min="512" max="65535" autocomplete="off" placeholder="8443 или другой свободный порт">
@@ -277,6 +308,6 @@
     </div>
   </dialog>
 
-  <script src="/app.js?v=1.2.20" type="module"></script>
+  <script src="/app.js?v=1.2.21" type="module"></script>
 </body>
 </html>

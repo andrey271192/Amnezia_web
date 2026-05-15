@@ -1,6 +1,6 @@
 {
   "name": "amnezia-admin",
-  "version": "1.2.20",
+  "version": "1.2.21",
   "private": true,
   "description": "amnezia_web — базовая панель AmneziaWG (FREE: просмотр и удаление клиентов; полная версия — PRO).",
   "license": "MIT",

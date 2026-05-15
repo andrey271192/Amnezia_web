@@ -29,6 +29,11 @@ const mtprotoBanner = document.querySelector("#mtproto-banner");
 const mtprotoHostPortInput = document.querySelector("#mtproto-host-port");
 const mtprotoSecretInput = document.querySelector("#mtproto-secret-opt");
 const mtprotoCalloutEl = document.querySelector("#mtproto-callout");
+const mtprotoLinkCardEl = document.querySelector("#mtproto-link-card");
+const mtprotoLinkAnchorEl = document.querySelector("#mtproto-link-anchor");
+const mtprotoLinkCopyBtn = document.querySelector("#mtproto-link-copy");
+const mtprotoLinkCopyState = document.querySelector("#mtproto-link-copy-state");
+const themeSelect = document.querySelector("#theme-select");
 
 const cascadePanel = document.querySelector("#cascade-panel");
 const usersPanel = document.querySelector("#users-panel");
@@ -469,18 +474,19 @@ async function refreshMtprotoPanel() {
       mtprotoActionsEl.appendChild(imgHint);
     }
 
-    if (snap.tgLink) {
-      const link = document.createElement("div");
-      link.className = "mtproto-deep-link muted warp-muted";
-      const lab = document.createElement("strong");
-      lab.textContent = "Ссылка в Telegram: ";
-      const a = document.createElement("a");
-      a.href = snap.tgLink;
-      a.textContent = snap.tgLink;
-      a.target = "_blank";
-      a.rel = "noopener noreferrer";
-      link.append(lab, a);
-      mtprotoActionsEl.appendChild(link);
+    if (mtprotoLinkCardEl) {
+      if (snap.tgLink) {
+        mtprotoLinkCardEl.classList.remove("hidden");
+        mtprotoLinkCardEl.dataset.tgLink = snap.tgLink;
+        if (mtprotoLinkAnchorEl) {
+          mtprotoLinkAnchorEl.href = snap.tgLink;
+          mtprotoLinkAnchorEl.textContent = snap.tgLink;
+        }
+        if (mtprotoLinkCopyState) mtprotoLinkCopyState.textContent = "";
+      } else {
+        mtprotoLinkCardEl.classList.add("hidden");
+        delete mtprotoLinkCardEl.dataset.tgLink;
+      }
     }
 
     const row = document.createElement("div");
@@ -562,6 +568,10 @@ async function refreshMtprotoPanel() {
     if (mtprotoCalloutEl) {
       mtprotoCalloutEl.textContent = "";
       mtprotoCalloutEl.classList.add("hidden");
+    }
+    if (mtprotoLinkCardEl) {
+      mtprotoLinkCardEl.classList.add("hidden");
+      delete mtprotoLinkCardEl.dataset.tgLink;
     }
     if (mtprotoLogsTailEl) mtprotoLogsTailEl.textContent = "";
     const err = document.createElement("p");
@@ -1659,5 +1669,83 @@ async function boot() {
   }
 }
 
+function applyThemePref(pref) {
+  const root = document.documentElement;
+  const p = pref === "light" || pref === "dark" ? pref : "auto";
+  const resolved =
+    p === "auto"
+      ? window.matchMedia?.("(prefers-color-scheme: dark)").matches
+        ? "dark"
+        : "light"
+      : p;
+  root.setAttribute("data-theme-pref", p);
+  root.setAttribute("data-theme", resolved);
+  try {
+    localStorage.setItem("amnezia.theme", p);
+  } catch {
+    /* приватный режим — не критично */
+  }
+}
+
+function initThemeSwitch() {
+  let saved = "auto";
+  try {
+    const v = localStorage.getItem("amnezia.theme");
+    if (v === "light" || v === "dark" || v === "auto") saved = v;
+  } catch {
+    /* приватный режим — не критично */
+  }
+  applyThemePref(saved);
+  if (themeSelect) {
+    themeSelect.value = saved;
+    themeSelect.addEventListener("change", () => applyThemePref(themeSelect.value));
+  }
+  const mql = window.matchMedia?.("(prefers-color-scheme: dark)");
+  if (mql) {
+    const handler = () => {
+      const pref = document.documentElement.getAttribute("data-theme-pref") || "auto";
+      if (pref === "auto") applyThemePref("auto");
+    };
+    if (typeof mql.addEventListener === "function") mql.addEventListener("change", handler);
+    else if (typeof mql.addListener === "function") mql.addListener(handler);
+  }
+}
+
+function initMtprotoLinkCopy() {
+  if (!mtprotoLinkCopyBtn) return;
+  mtprotoLinkCopyBtn.addEventListener("click", async () => {
+    const link =
+      mtprotoLinkCardEl?.dataset?.tgLink ||
+      mtprotoLinkAnchorEl?.href ||
+      "";
+    if (!link) return;
+    try {
+      if (navigator.clipboard?.writeText) await navigator.clipboard.writeText(link);
+      else {
+        const ta = document.createElement("textarea");
+        ta.value = link;
+        ta.style.position = "fixed";
+        ta.style.opacity = "0";
+        document.body.appendChild(ta);
+        ta.select();
+        document.execCommand("copy");
+        ta.remove();
+      }
+      if (mtprotoLinkCopyState) {
+        mtprotoLinkCopyState.textContent = "Скопировано";
+        setTimeout(() => {
+          if (mtprotoLinkCopyState) mtprotoLinkCopyState.textContent = "";
+        }, 2000);
+      }
+    } catch (e) {
+      if (mtprotoLinkCopyState) {
+        mtprotoLinkCopyState.textContent = "Не удалось скопировать — выделите вручную.";
+      }
+    }
+  });
+}
+
+initThemeSwitch();
+initMtprotoLinkCopy();
 void hydratePanelPromoFooter();
 boot();
