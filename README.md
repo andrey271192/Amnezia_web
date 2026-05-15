@@ -80,6 +80,9 @@
 export INSTALL_FREE_COMMUNITY_ACTIVATION=1
 curl -fsSL https://raw.githubusercontent.com/andrey271192/amnezia_web/main/scripts/install.sh | sudo -E bash
 ```
+если нужно сменить порт например на 8884
+curl -fsSL https://raw.githubusercontent.com/andrey271192/amnezia_web/main/scripts/install.sh \
+  | sudo -E env HOST_PORT=8884 LANDING_PORT=8081 bash
 
 Переменная **`INSTALL_FREE_COMMUNITY_ACTIVATION`** сохранится в томе как файл **`.install-free-github-pro-opt-in`**: следующие апдейты через **`sudo bash`** подхватят маркер **без** повторного `export` (или с **`sudo -E`**, если передаёте другие переменные в той же сессии).
 
