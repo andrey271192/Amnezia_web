@@ -86,11 +86,12 @@ let warpSshPendingCmd = null;
 /** Какие панели скрыты настройкой сервера (`UI_HIDE_SECTIONS`). */
 let uiHidden = { users: false, warp: false, cascade: false, mtproto: false };
 
-/** Базовые возможности панели (просмотр клиентов + удаление). */
+/** Базовые возможности панели (управление клиентами + удаление). */
 let editionState = {
-  readOnlyClients: true,
+  readOnlyClients: false,
   allowDeleteClients: true,
   showDebugWg: false,
+  proHostTools: false,
 };
 
 function applyEditionPayload(data) {
@@ -100,15 +101,16 @@ function applyEditionPayload(data) {
     readOnlyClients: ed.readOnlyClients !== false,
     allowDeleteClients: ed.allowDeleteClients !== false,
     showDebugWg: Boolean(ed.showDebugWg),
+    proHostTools: ed.proHostTools === true,
   };
   const titleEl = document.querySelector(".top h1");
   if (titleEl) titleEl.textContent = "Пользователи AmneziaWG";
   const subEl = document.querySelector(".top .sub");
   if (subEl) {
     subEl.textContent =
-      "Базовая панель: просмотр клиентов и статусов, удаление клиента с сервера, установка Telegram MTProto‑прокси (Docker).";
+      "Просмотр клиентов и статусов, вкл/выкл, переименование, даты отключения, экспорт .conf, удаление, установка Telegram MTProto‑прокси (Docker).";
   }
-  document.querySelector(".clock-host-sync")?.classList.toggle("hidden", editionState.readOnlyClients);
+  document.querySelector(".clock-host-sync")?.classList.toggle("hidden", !editionState.proHostTools);
   if (wgRawDetails) wgRawDetails.hidden = uiHidden.users || !editionState.showDebugWg;
 }
 
@@ -313,7 +315,7 @@ function applyUiHiddenFromPayload(data) {
   if (wgRawDetails) wgRawDetails.hidden = uiHidden.users || !editionState.showDebugWg;
   if (cascadePanel) cascadePanel.hidden = uiHidden.cascade;
   if (warpPanel) warpPanel.hidden = uiHidden.warp;
-  if (warpCfPanel) warpCfPanel.hidden = editionState.readOnlyClients;
+  if (warpCfPanel) warpCfPanel.hidden = !editionState.proHostTools;
   if (mtprotoPanel) mtprotoPanel.hidden = uiHidden.mtproto;
   void refreshMtprotoPanel();
 }
@@ -777,7 +779,7 @@ async function loadTimeSyncCaps() {
   const btn = document.querySelector("#sync-host-time");
   try {
     const c = await api("/api/time-sync-capabilities");
-    if (editionState.readOnlyClients) {
+    if (!editionState.proHostTools) {
       if (hint) {
         hint.textContent =
           "Синхронизация времени хоста по SSH недоступна в базовой версии панели.";
@@ -1216,7 +1218,7 @@ function redrawWarpCfPresets() {
 
 async function refreshWarpCfPanel() {
   if (!warpCfPanel || !warpCfStatusLine || !warpCfActionsEl || !warpCfLogEl) return;
-  if (editionState.readOnlyClients) {
+  if (!editionState.proHostTools) {
     warpCfPanel.hidden = true;
     return;
   }

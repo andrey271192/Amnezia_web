@@ -102,9 +102,10 @@ function panelPromoFooterPayload() {
 
 function editionPayload() {
   return {
-    readOnlyClients: true,
+    readOnlyClients: false,
     allowDeleteClients: true,
     showDebugWg: false,
+    proHostTools: false,
   };
 }
 
@@ -430,7 +431,7 @@ function requireAuthOrExportToken(req, res, next) {
 function rejectUnavailableFeature(res) {
   res.status(403).json({
     error:
-      "Эта функция недоступна в базовой версии панели: полное управление клиентами, экспорт .conf, каскад, Cloudflare WARP и синхронизация времени хоста.",
+      "Эта функция недоступна в базовой версии панели: каскад, Cloudflare WARP и синхронизация времени хоста.",
   });
 }
 
@@ -2503,7 +2504,7 @@ app.post("/api/warp/routing", requireAuth, requireProTier, async (req, res) => {
   }
 });
 
-app.post("/api/clients/disable", requireAuth, requireProTier, async (req, res) => {
+app.post("/api/clients/disable", requireAuth, async (req, res) => {
   const rt = runtimeForRequest(req);
   const clientId = req.body?.clientId;
   if (!clientId) return res.status(400).json({ error: "clientId required" });
@@ -2526,7 +2527,7 @@ app.post("/api/clients/disable", requireAuth, requireProTier, async (req, res) =
   }
 });
 
-app.post("/api/clients/enable", requireAuth, requireProTier, async (req, res) => {
+app.post("/api/clients/enable", requireAuth, async (req, res) => {
   const rt = runtimeForRequest(req);
   const clientId = req.body?.clientId;
   if (!clientId) return res.status(400).json({ error: "clientId required" });
@@ -2576,7 +2577,7 @@ AllowedIPs = ${ips}`;
   }
 });
 
-app.post("/api/clients/disconnect-date", requireAuth, requireProTier, async (req, res) => {
+app.post("/api/clients/disconnect-date", requireAuth, async (req, res) => {
   const rt = runtimeForRequest(req);
   const clientId = req.body?.clientId;
   if (!clientId) return res.status(400).json({ error: "clientId required" });
@@ -2616,7 +2617,7 @@ app.post("/api/clients/disconnect-date", requireAuth, requireProTier, async (req
   }
 });
 
-app.post("/api/clients/rename", requireAuth, requireProTier, async (req, res) => {
+app.post("/api/clients/rename", requireAuth, async (req, res) => {
   const rt = runtimeForRequest(req);
   const clientId = req.body?.clientId;
   const rawName = req.body?.name ?? req.body?.clientName;
