@@ -1666,6 +1666,54 @@ function initThemeSwitch() {
   }
 }
 
+/** Ссылки доната в подвале панели (`GET /api/panel/footer`). */
+function wirePanelPromoAnchor(el, url, label) {
+  const u = typeof url === "string" ? url.trim() : "";
+  const lb = typeof label === "string" ? label.trim() : "";
+  if (!el || !u || !lb) {
+    if (el) {
+      el.classList.add("hidden");
+      el.removeAttribute("href");
+      el.textContent = "";
+    }
+    return false;
+  }
+  el.href = u;
+  el.textContent = lb;
+  el.classList.remove("hidden");
+  return true;
+}
+
+async function hydratePanelPromoFooter() {
+  const gap1 = document.getElementById("footer-promo-gap1");
+  const aDonF = document.getElementById("footer-promo-donate");
+  const fSepDO = document.getElementById("footer-promo-sep-donate-ozon");
+  const aOzonF = document.getElementById("footer-promo-ozon");
+  const fSepOT = document.getElementById("footer-promo-sep-ozon-tg");
+  const aTgF = document.getElementById("footer-promo-telegram");
+
+  try {
+    const r = await fetch("/api/panel/footer", { credentials: "same-origin" });
+    if (!r.ok) return;
+    const j = await r.json().catch(() => null);
+    if (!j || typeof j !== "object") return;
+
+    wirePanelPromoAnchor(aDonF, j.donateUrl, j.donateLabel);
+    wirePanelPromoAnchor(aOzonF, j.ozonUrl, j.ozonLabel);
+    wirePanelPromoAnchor(aTgF, j.telegramUrl, j.telegramLabel);
+
+    const footerD = aDonF && !aDonF.classList.contains("hidden");
+    const footerO = aOzonF && !aOzonF.classList.contains("hidden");
+    const footerT = aTgF && !aTgF.classList.contains("hidden");
+
+    if (gap1) gap1.classList.toggle("hidden", !(footerD || footerO || footerT));
+    if (fSepDO) fSepDO.classList.toggle("hidden", !(footerD && (footerO || footerT)));
+    if (fSepOT) fSepOT.classList.toggle("hidden", !(footerO && footerT));
+  } catch {
+    /* офлайн или сбой — в HTML уже дефолтные ссылки подвала */
+  }
+}
+
 function initMtprotoLinkCopy() {
   if (!mtprotoLinkCopyBtn) return;
   mtprotoLinkCopyBtn.addEventListener("click", async () => {
