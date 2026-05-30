@@ -862,14 +862,21 @@ a.btn {
 /* --- Table --- */
 .table-wrap {
   overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
   margin: 0 -0.25rem;
   padding: 0 0.25rem;
   border-radius: var(--radius-md);
+  max-width: 100%;
+}
+
+#users-panel .panel-fold-body {
+  overflow-x: visible;
 }
 
 table.clients-table {
-  table-layout: fixed;
+  table-layout: auto;
   width: 100%;
+  min-width: 52rem;
 }
 
 table {
@@ -921,27 +928,48 @@ tr:last-child td {
 
 .clients-table th:nth-child(1),
 .clients-table td:nth-child(1) {
-  width: 24%;
+  width: 22%;
+  min-width: 9.5rem;
   vertical-align: top;
 }
 
 .clients-table th:nth-child(2),
 .clients-table td:nth-child(2) {
-  width: 16%;
+  width: 11%;
+  min-width: 6.5rem;
+  white-space: nowrap;
 }
 
 .clients-table th:nth-child(3),
 .clients-table td:nth-child(3) {
-  width: 14%;
+  width: 10%;
+  min-width: 6.25rem;
 }
 
 .clients-table th:nth-child(4),
 .clients-table td:nth-child(4) {
-  width: 20%;
+  width: 16%;
+  min-width: 8.75rem;
+}
+
+.clients-table th:nth-child(4) {
+  white-space: normal;
+  line-height: 1.25;
+  hyphens: auto;
+}
+
+.clients-table th:nth-child(5),
+.clients-table td:nth-child(5) {
+  width: 1%;
+  min-width: 13.5rem;
 }
 
 .clients-table .name-cell {
   min-width: 0;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.2rem 0.45rem;
 }
 
 .clients-table td.actions {
@@ -949,7 +977,6 @@ tr:last-child td {
 }
 
 .th-actions {
-  width: 1%;
   white-space: nowrap;
   text-align: right;
 }
@@ -957,12 +984,23 @@ tr:last-child td {
 .name-cell strong {
   font-weight: 650;
   font-size: 0.9rem;
-  display: block;
+  display: inline-block;
   line-height: 1.35;
+  max-width: 100%;
+  overflow-wrap: anywhere;
 }
 
 .name-cell .rename-inline {
-  margin-top: 0.35rem;
+  margin-top: 0;
+  display: inline-flex;
+  flex: 0 0 auto;
+}
+
+.name-cell .hint-mini,
+.name-cell .hint-mini + p,
+.name-cell > p.muted {
+  flex: 1 1 100%;
+  margin-top: 0.15rem;
 }
 
 .date-cell {
@@ -1056,13 +1094,14 @@ tr:last-child td {
   flex-wrap: wrap;
   gap: 0.28rem;
   justify-content: flex-end;
-  max-width: 100%;
+  align-items: center;
+  min-width: 12.5rem;
 }
 
 .actions .btn.small,
 .actions a.btn.small {
-  flex: 0 1 auto;
-  min-width: 0;
+  flex: 0 0 auto;
+  white-space: nowrap;
   padding: 0.28rem 0.5rem;
   font-size: 0.72rem;
 }
@@ -1473,9 +1512,22 @@ tr:last-child td {
     padding: 0.6rem 0.55rem;
   }
 
+  table.clients-table {
+    min-width: 40rem;
+  }
+
   .clients-table th:nth-child(4),
   .clients-table td:nth-child(4) {
-    display: none;
+    min-width: 6.5rem;
+  }
+
+  .clients-table th:nth-child(5),
+  .clients-table td:nth-child(5) {
+    min-width: 10.5rem;
+  }
+
+  .actions {
+    min-width: 9.5rem;
   }
 
   .btn.small {

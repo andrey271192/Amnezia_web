@@ -1,6 +1,6 @@
 {
   "name": "amnezia-admin",
-  "version": "1.2.32",
+  "version": "1.2.33",
   "private": true,
   "description": "amnezia_web — открытая базовая веб-панель AmneziaWG на VPS (Docker): просмотр и удаление клиентов, MTProto-прокси.",
   "license": "MIT",
