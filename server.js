@@ -29,14 +29,6 @@ function envTruthy(v) {
   return s === "1" || s === "true" || s === "yes";
 }
 
-/** Явное отключение поля GitHub‑токена / установки PRO из UI (`0`, `false`, `no`, `off`). Пустое или неизвестное — не отключает. */
-function communityGithubActivationDisabledByEnv() {
-  const v = process.env.ALLOW_COMMUNITY_GITHUB_ACTIVATION;
-  if (typeof v !== "string") return false;
-  const s = v.trim().toLowerCase();
-  return s === "0" || s === "false" || s === "no" || s === "off";
-}
-
 /** Какие блоки веб-интерфейса скрыты: `UI_HIDE_SECTIONS=users,warp,cascade` или `UI_HIDE_USERS` и т.д. */
 function resolveUiHidden() {
   const raw = process.env.UI_HIDE_SECTIONS?.trim();
@@ -57,27 +49,7 @@ function resolveUiHidden() {
 
 const UI_HIDDEN = resolveUiHidden();
 
-const AMNEZIA_EDITION = (process.env.AMNEZIA_EDITION || "pro").trim().toLowerCase();
-const IS_COMMUNITY = AMNEZIA_EDITION === "community";
-/** В редакции FREE поле для PAT и установка из панели включены по умолчанию; выключить: `ALLOW_COMMUNITY_GITHUB_ACTIVATION=0` (или `false`/`no`/`off`). */
-const ALLOW_COMMUNITY_GITHUB_ACTIVATION =
-  IS_COMMUNITY && !communityGithubActivationDisabledByEnv();
-const COMMUNITY_PRIVATE_INSTALL_SCRIPT_URL =
-  process.env.COMMUNITY_PRIVATE_INSTALL_SCRIPT_URL?.trim() ||
-  "https://raw.githubusercontent.com/andrey271192/amnezia_web-pro/main/scripts/install.sh";
-const PRIVATE_INSTALL_SCRIPT_MAX_BYTES = Number(process.env.PRIVATE_INSTALL_SCRIPT_MAX_BYTES || 2_097_152) || 2_097_152;
-/** Флаг выполнения одноразового bash install из UI (держим второй параллельный запрос). */
-let communityPrivateInstallBusy = false;
-const COMMUNITY_SKIP_REMOVE_FREE_BEFORE_PRIVATE_PRO = envTruthy(
-  process.env.COMMUNITY_SKIP_REMOVE_FREE_BEFORE_PRIVATE_PRO,
-);
-const COMMUNITY_DISABLE_DOCKER_CLI_HELPER = envTruthy(process.env.COMMUNITY_DISABLE_DOCKER_CLI_HELPER);
-const COMMUNITY_UPGRADE_URL =
-  process.env.COMMUNITY_UPGRADE_URL?.trim() ||
-  "https://boosty.to/andrey27/purchase/3906453?ssource=DIRECT&share=subscription_link";
-const COMMUNITY_UPGRADE_PITCH =
-  process.env.COMMUNITY_UPGRADE_PITCH?.trim() ||
-  "В PRO: вкл/выкл клиентов, даты и расписание отключений, переименование, экспорт .conf, каскад, Cloudflare WARP, синхронизация времени хоста. В FREE: удаление клиента с сервера + отдельный раздел установки Telegram MTProto-прокси (Docker-контейнер). Полная сборка AWG-панели — приватный репозиторий amnezia_web-PRO; доступ по подписке Boosty.";
+const PANEL_FOOTER_DONATE_DEFAULT = "https://boosty.to/andrey27/donate";
 
 const PANEL_FOOTER_TELEGRAM_DEFAULT = "https://t.me/lot_andrey";
 const PANEL_FOOTER_OZON_DEFAULT =
@@ -99,7 +71,7 @@ function sanitizeHttpsHttpUrl(raw) {
 function panelPromoFooterPayload() {
   const donateResolved =
     sanitizeHttpsHttpUrl(
-      process.env.PANEL_FOOTER_DONATE_URL?.trim() || COMMUNITY_UPGRADE_URL.trim(),
+      process.env.PANEL_FOOTER_DONATE_URL?.trim() || PANEL_FOOTER_DONATE_DEFAULT,
     ) || "";
   const telegramResolved =
     sanitizeHttpsHttpUrl(
@@ -130,19 +102,13 @@ function panelPromoFooterPayload() {
 
 function editionPayload() {
   return {
-    tier: IS_COMMUNITY ? "community" : "pro",
-    readOnlyClients: IS_COMMUNITY,
-    /** В FREE разрешено удаление записи клиента (остальные мутации — PRO). */
-    allowDeleteClients: IS_COMMUNITY,
-    upgradeUrl: IS_COMMUNITY ? COMMUNITY_UPGRADE_URL : null,
-    upgradePitch: IS_COMMUNITY ? COMMUNITY_UPGRADE_PITCH : null,
-    showDebugWg: !IS_COMMUNITY,
-    githubActivationAllowed: ALLOW_COMMUNITY_GITHUB_ACTIVATION && IS_COMMUNITY,
+    readOnlyClients: true,
+    allowDeleteClients: true,
+    showDebugWg: false,
   };
 }
 
 function effectiveUiHidden() {
-  if (!IS_COMMUNITY) return { ...UI_HIDDEN };
   return {
     users: UI_HIDDEN.users,
     warp: true,
@@ -461,199 +427,15 @@ function requireAuthOrExportToken(req, res, next) {
   requireAuth(req, res, next);
 }
 
-function rejectCommunityProOnly(res) {
+function rejectUnavailableFeature(res) {
   res.status(403).json({
-      error:
-        "Доступно в версии PRO: полное управление клиентами, экспорт .conf, каскад, Cloudflare WARP и синхронизация времени хоста. Раздел MTProto‑прокси Telegram (Docker) в базовой панели уже без PRO.",
-    upgradeRequired: true,
-    upgradeUrl: COMMUNITY_UPGRADE_URL,
+    error:
+      "Эта функция недоступна в базовой версии панели: полное управление клиентами, экспорт .conf, каскад, Cloudflare WARP и синхронизация времени хоста.",
   });
 }
 
-/** Токен GitHub только из печатаемых ASCII без пробелов/newline (classic ghp_* / github_pat_*). */
-function validateGithubBearerToken(tok) {
-  if (typeof tok !== "string") return false;
-  const s = tok.trim();
-  if (s.length < 20 || s.length > 4096) return false;
-  return /^[!-~]+$/.test(s);
-}
-
-/** Имя контейнера для встраивания в `sh -lc` во внешнем helper (docker rm -f …). */
-function shellSafeDockerContainerName(raw, fallback) {
-  const s = typeof raw === "string" ? raw.trim() : "";
-  if (/^[a-zA-Z][a-zA-Z0-9_.-]{0,127}$/.test(s)) return s;
-  return fallback;
-}
-
-/**
- * Одноразовый helper (`docker:*-cli`) почти всегда Alpine: нет **`bash`** (#!/usr/bin/env bash у install.sh), **`curl`**, **`openssl`** и **`tar`**.
- * Без них `exec bash ./install.sh` падает сразу (~код 2/127 и пустое продолжение лога после строки про helper).
- * Отключить: COMMUNITY_HELPER_SKIP_PREPARE_TOOLS=1 (если свой образ уже со всем необходимым).
- */
-function dockerCliHelperEnsureFetchToolsScript() {
-  if (envTruthy(process.env.COMMUNITY_HELPER_SKIP_PREPARE_TOOLS)) return "";
-  return `
-# bash + curl + openssl + tar для приватного install.sh:
-#   - bash: shebang #!/usr/bin/env bash
-#   - curl: скачивание tar.gz релиза с GitHub
-#   - openssl: генерация первичного пароля/секретов
-#   - tar:    распаковка tar.gz
-if ! command -v bash >/dev/null 2>&1 || ! command -v curl >/dev/null 2>&1 \\
-   || ! command -v openssl >/dev/null 2>&1 || ! command -v tar >/dev/null 2>&1; then
-  if command -v apk >/dev/null 2>&1; then
-    apk add --no-cache bash curl ca-certificates openssl tar \\
-      || echo "⚠ helper: apk add bash/curl/openssl/tar failed — install.sh может не запуститься"
-  elif command -v apt-get >/dev/null 2>&1; then
-    export DEBIAN_FRONTEND=noninteractive
-    apt-get update -qq >/dev/null \\
-      && apt-get install -y -qq bash curl ca-certificates openssl tar \\
-      || echo "⚠ helper: apt bash/curl/openssl/tar failed — install.sh может не запуститься"
-  fi
-fi
-`.trim();
-}
-
-/**
- * Пути `conf` / `clientsTable` внутри контейнера Amnezia: не всегда `awg0.conf`
- * в `/opt/amnezia/awg/` (legacy — `wg0.conf`, второй сервис — подкаталог `awg2`).
- */
-function probeAmneziaTunnelPaths(containerName) {
-  const safe = /^[a-zA-Z0-9_.-]+$/.test(containerName) ? containerName : "";
-  if (!safe) return null;
-  const script = `
-set -eu
-CONF=""
-for f in "/opt/amnezia/awg/awg0.conf" "/opt/amnezia/awg/wg0.conf" "/opt/amnezia/awg2/awg0.conf" "/opt/amnezia/awg2/wg0.conf" "/etc/wireguard/wg0.conf" "/etc/wireguard/awg0.conf"; do
-  if [ -f "$f" ]; then CONF="$f"; break; fi
-done
-if [ -z "$CONF" ]; then
-  CONF="$(find /opt/amnezia /etc/wireguard -maxdepth 10 \\( -name 'wg0.conf' -o -name 'awg0.conf' \\) 2>/dev/null | head -n 1)"
-fi
-[ -n "$CONF" ] && [ -f "$CONF" ] || exit 10
-DIR="$(dirname "$CONF")"
-CLIENTS=""
-for c in "$DIR/clientsTable" "/opt/amnezia/awg/clientsTable" "/opt/amnezia/awg2/clientsTable"; do
-  if [ -f "$c" ]; then CLIENTS="$c"; break; fi
-done
-[ -n "$CLIENTS" ] || exit 11
-PSK=""
-for p in "$DIR/wireguard_psk.key" "/opt/amnezia/awg/wireguard_psk.key"; do
-  if [ -f "$p" ]; then PSK="$p"; break; fi
-done
-printf '%s|%s|%s\\n' "$CONF" "$CLIENTS" "$PSK"
-`.trim();
-
-  try {
-    const out = execFileSync("docker", ["exec", containerName, "sh", "-c", script], {
-      stdio: ["ignore", "pipe", "ignore"],
-      encoding: "utf8",
-      timeout: 12000,
-    }).trimEnd();
-    const line = (out.split(/\r?\n/).find((l) => l.includes("|")) ?? "").trim();
-    const [confPath = "", clientsPath = "", pskPath = ""] = line.split("|").map((s) => s.trim());
-    if (!confPath || !clientsPath) return null;
-    return {
-      confPath,
-      clientsPath,
-      ...(pskPath ? { pskPath } : {}),
-    };
-  } catch {
-    return null;
-  }
-}
-
-/**
- * Авто-обнаружение профилей `amnezia-awg*` до старта PRO `install.sh`.
- * Возвращает JSON для `-e AWG_PROFILES=...` или пустую строку при сбое.
- *
- * Для каждого контейнера ищутся реальные `confPath`/`clientsTable` (не только дефолт `awg0.conf`).
- *
- * Если запущен ровно один `amnezia-awg*`, профиль один — переключатель в UI может не понадаться,
- * но верные пути всё равно попадают в панель.
- */
-function autoDiscoverAwgProfilesJson() {
-  if (envTruthy(process.env.COMMUNITY_DISABLE_AWG_PROFILES_AUTODETECT)) return "";
-  if (process.env.AWG_PROFILES?.trim()) return process.env.AWG_PROFILES.trim();
-  try {
-    const namesOut = execFileSync(
-      "docker",
-      ["ps", "--format", "{{.Names}}", "--filter", "name=^amnezia-awg"],
-      { stdio: ["ignore", "pipe", "ignore"], timeout: 5000 },
-    )
-      .toString()
-      .trim();
-    const names = namesOut.split("\n").map((x) => x.trim()).filter(Boolean);
-    if (names.length === 0) return "";
-    const entries = names
-      .map((name) => {
-        let firstUdp = null;
-        let portLabel = "";
-        try {
-          const ports = execFileSync("docker", ["port", name], {
-            stdio: ["ignore", "pipe", "ignore"],
-            timeout: 5000,
-          })
-            .toString()
-            .trim();
-          const udpLine = ports.split("\n").find((l) => /\/udp\b/.test(l));
-          if (udpLine) {
-            const m = udpLine.match(/^(\d+)\/udp/);
-            if (m) {
-              firstUdp = Number(m[1]);
-              portLabel = ` (${m[1]})`;
-            }
-          }
-        } catch {
-          //
-        }
-        const idSuffix = name.replace(/^amnezia-/, "") || name;
-        return {
-          id: idSuffix,
-          label: `AmneziaWG${portLabel}`,
-          container: name,
-          firstUdp: firstUdp ?? 1 << 30,
-        };
-      })
-      .sort((a, b) => a.firstUdp - b.firstUdp || a.container.localeCompare(b.container));
-    const resolved = [];
-    for (const row of entries) {
-      const probed = probeAmneziaTunnelPaths(row.container);
-      if (!probed) {
-        console.warn(
-          `autoDiscover AWG: в контейнере ${row.container} не найдены conf/clientsTable — пропуск авто-AWG_PROFILES`,
-        );
-        return "";
-      }
-      resolved.push({
-        id: row.id,
-        label: row.label,
-        container: row.container,
-        confPath: probed.confPath,
-        clientsPath: probed.clientsPath,
-        ...(probed.pskPath ? { pskPath: probed.pskPath } : {}),
-      });
-    }
-    return JSON.stringify(resolved);
-  } catch {
-    return "";
-  }
-}
-
-function privateInstallScriptUrlLogged() {
-  try {
-    const u = new URL(COMMUNITY_PRIVATE_INSTALL_SCRIPT_URL);
-    return `${u.hostname}${u.pathname}`;
-  } catch {
-    return "(invalid PRIVATE_INSTALL_SCRIPT_URL)";
-  }
-}
-
 function requireProTier(_req, res, next) {
-  if (!IS_COMMUNITY) {
-    next();
-    return;
-  }
-  rejectCommunityProOnly(res);
+  rejectUnavailableFeature(res);
 }
 
 function runtimeFromExportRequest(req) {
@@ -1693,6 +1475,8 @@ const MSG_UI_WARP_OFF = "Раздел Cloudflare WARP отключён на эт
 const MSG_UI_CASCADE_OFF =
   "Каскад отключён на этом сервере (UI_HIDE_SECTIONS / UI_HIDE_CASCADE).";
 const MSG_UI_MTProto_OFF = "Раздел MTProto отключён (UI_HIDE_SECTIONS включает mtproto или задан UI_HIDE_MTPROTO=1).";
+const MSG_WARP_CF_HELP =
+  "Официальный cloudflare-warp (warp-cli SOCKS5): нужен sshpass в образе панели и вход root по паролю на хосте (TIME_SYNC_SSH_HOST, часто 172.17.0.1). Скрипт: scripts/warp-install-cf.sh";
 
 const MTPRO_CONTAINER = (process.env.MTPRO_PROXY_CONTAINER || "mtproto-proxy").trim();
 const MTPRO_IMAGE = (process.env.MTPRO_PROXY_IMAGE || "telegrammessenger/proxy:latest").trim();
@@ -1842,378 +1626,6 @@ if (UI_HIDDEN.users || UI_HIDDEN.warp || UI_HIDDEN.cascade || UI_HIDDEN.mtproto)
     `UI_HIDDEN: users=${UI_HIDDEN.users} warp=${UI_HIDDEN.warp} cascade=${UI_HIDDEN.cascade} mtproto=${UI_HIDDEN.mtproto}`,
   );
 }
-if (IS_COMMUNITY) {
-  console.warn(`Редакция community (просмотр клиентов и удаление). Остальное — PRO: ${COMMUNITY_UPGRADE_URL}`);
-}
-if (ALLOW_COMMUNITY_GITHUB_ACTIVATION && IS_COMMUNITY) {
-  console.warn(
-    "Установка PRO из панели включена (по умолчанию в FREE). Отключить: ALLOW_COMMUNITY_GITHUB_ACTIVATION=0. GitHub-токен не сохранять в журналах; ограничьте доступ к паролю панели и Docker-сокету.",
-  );
-} else if (IS_COMMUNITY) {
-  console.warn(
-    "Установка PRO из панели отключена: ALLOW_COMMUNITY_GITHUB_ACTIVATION=0|false|no|off.",
-  );
-}
-app.use(express.json({ limit: "512kb" }));
-
-app.post("/api/community/run-private-install", requireAuth, async (req, res) => {
-  if (!IS_COMMUNITY || !ALLOW_COMMUNITY_GITHUB_ACTIVATION) {
-    return res.status(403).json({
-      error: "Запуск установки PRO из панели отключён.",
-    });
-  }
-  if (communityPrivateInstallBusy) {
-    return res.status(429).json({
-      error: "Установка PRO уже выполняется. Через 1–2 минуты обновите страницу или см. журнал ниже.",
-    });
-  }
-
-  const token = typeof req.body?.githubToken === "string" ? req.body.githubToken.trim() : "";
-  if (!validateGithubBearerToken(token)) {
-    return res.status(400).json({
-      error:
-        "Нужен GitHub-токен с доступом к приватному репозиторию (classic: repo; fine-grained: Contents Read для репозитория со scripts/install.sh).",
-    });
-  }
-
-  let tmpDir = "";
-  communityPrivateInstallBusy = true;
-
-  try {
-    const ac = new AbortController();
-    const timeoutMs = Number(process.env.COMMUNITY_INSTALL_FETCH_MS || 60_000) || 60_000;
-    const tmo = setTimeout(() => ac.abort(), timeoutMs);
-    const ghRes = await fetch(COMMUNITY_PRIVATE_INSTALL_SCRIPT_URL, {
-      redirect: "follow",
-      headers: {
-        Authorization: `token ${token}`,
-        Accept: "*/*",
-        "User-Agent": "amnezia-web-community-private-install",
-      },
-      signal: ac.signal,
-    }).finally(() => clearTimeout(tmo));
-
-    const buf = Buffer.from(await ghRes.arrayBuffer());
-    if (!ghRes.ok || buf.byteLength === 0) {
-      communityPrivateInstallBusy = false;
-      return res.status(400).json({
-        error: `Не удалось скачать install (${ghRes.status}). Проверьте токен и URL.`,
-        urlForDebug: privateInstallScriptUrlLogged(),
-      });
-    }
-    if (buf.byteLength > PRIVATE_INSTALL_SCRIPT_MAX_BYTES) {
-      communityPrivateInstallBusy = false;
-      return res.status(400).json({ error: "Скачанный скрипт слишком большой — отказ." });
-    }
-
-    const stageRoot = path.join(DATA_DIR, ".priv-install-tmp");
-    try {
-      fs.mkdirSync(stageRoot, { recursive: true });
-    } catch {
-      //
-    }
-    tmpDir = fs.mkdtempSync(path.join(stageRoot, "amnezia-priv-inst-"));
-    const scriptPath = path.join(tmpDir, "install.sh");
-    fs.writeFileSync(scriptPath, buf);
-    fs.chmodSync(scriptPath, 0o700);
-
-    ensureDataDir();
-    const logAbs = path.join(DATA_DIR, "community-install-last.log");
-    const header = `\n${"=".repeat(60)}\n${new Date().toISOString()} — старт install из UI (COMMUNITY)\nURL: ${COMMUNITY_PRIVATE_INSTALL_SCRIPT_URL}\n${"=".repeat(60)}\n`;
-    fs.appendFileSync(logAbs, header);
-
-    const useDockerCliHelper = !COMMUNITY_DISABLE_DOCKER_CLI_HELPER;
-    const helperImage =
-      process.env.COMMUNITY_PRO_INSTALL_HELPER_IMAGE?.trim() || "docker:26-cli";
-    const freePanelName = shellSafeDockerContainerName(
-      process.env.FREE_PANEL_CONTAINER_FOR_PRO_INSTALL,
-      "amnezia-admin",
-    );
-    const freeLandingName = shellSafeDockerContainerName(
-      process.env.FREE_LANDING_CONTAINER_FOR_PRO_INSTALL,
-      "amnezia-web-landing",
-    );
-    const staleProName = shellSafeDockerContainerName(
-      process.env.STALE_PRO_PANEL_CONTAINER_FOR_PRO_INSTALL,
-      "amnezia-admin-pro",
-    );
-
-    if (useDockerCliHelper) {
-      fs.appendFileSync(
-        logAbs,
-        `\n→ Одноразовый установщик: ${helperImage}; FREE=${freePanelName}, лендинг=${freeLandingName}, удаление зависшего PRO=${staleProName}. Отключить слой: COMMUNITY_DISABLE_DOCKER_CLI_HELPER=1\n`,
-      );
-    } else {
-      fs.appendFileSync(
-        logAbs,
-        "\n→ COMMUNITY_DISABLE_DOCKER_CLI_HELPER=1 — install идёт в том же контейнере; FREE не удаляется до скрипта (частый конфликт :8080 с PRO).\n",
-      );
-    }
-
-    const logStream = useDockerCliHelper ? null : fs.createWriteStream(logAbs, { flags: "a" });
-
-    let finalized = false;
-    const finalize = (code = null, signal = null, errText = "") => {
-      if (finalized) return;
-      finalized = true;
-      communityPrivateInstallBusy = false;
-      const foot = `\n--- завершено ${new Date().toISOString()}, code=${code ?? "?"}${
-        signal ? ` signal=${signal}` : ""
-      }${errText ? ` err=${errText}` : ""} ---\n`;
-      try {
-        fs.appendFileSync(logAbs, foot);
-      } catch {
-        //
-      }
-      const rmTmp = () => {
-        try {
-          fs.rmSync(tmpDir, { recursive: true, force: true });
-        } catch {
-          //
-        }
-      };
-      if (logStream) {
-        logStream.end(() => rmTmp());
-      } else {
-        rmTmp();
-      }
-    };
-
-    if (useDockerCliHelper) {
-      const dataHost = HOST_DATA_DIR;
-      const relStage = path.relative(DATA_DIR, tmpDir);
-      const stageInHelper = `/mnt/data/${relStage}`;
-      const autoAwgProfilesJson = autoDiscoverAwgProfilesJson();
-      if (autoAwgProfilesJson) {
-        fs.appendFileSync(
-          logAbs,
-          `→ AWG_PROFILES для PRO собран автоматически из живых amnezia-awg* контейнеров: ${autoAwgProfilesJson}\n`,
-        );
-      }
-      const prelude = COMMUNITY_SKIP_REMOVE_FREE_BEFORE_PRIVATE_PRO
-        ? "sleep 2"
-        : [
-            "sleep 3",
-            `docker rm -f ${freePanelName} ${freeLandingName} 2>/dev/null || true`,
-            `docker rm -f ${staleProName} 2>/dev/null || true`,
-            'for __amz_hp in $(docker ps -aq --filter name=amnezia-admin-pro 2>/dev/null); do docker rm -f "$__amz_hp" 2>/dev/null || true; done',
-          ].join("; ");
-      const fetchTools = dockerCliHelperEnsureFetchToolsScript();
-      const sh = `
-exec >>"/mnt/data/community-install-last.log" 2>&1
-set -eu
-echo "→ helper (docker cli): prelude + bash/curl..."
-echo "  staging: ${stageInHelper} (host: ${tmpDir.replace(DATA_DIR, dataHost)})"
-[ -f "${stageInHelper}/install.sh" ] || { echo "⚠ helper: нет install.sh в ${stageInHelper} (проверьте монтирование ${dataHost}:/mnt/data)"; ls -la "${stageInHelper}" 2>&1 || true; exit 125; }
-${prelude}
-${fetchTools ? `${fetchTools}\n` : ""}command -v bash >/dev/null 2>&1 || { echo "⚠ helper: нет bash после apk/apt — см. ошибки apk выше"; exit 126; }
-command -v curl >/dev/null 2>&1 || { echo "⚠ helper: нет curl после apk/apt"; exit 126; }
-command -v openssl >/dev/null 2>&1 || { echo "⚠ helper: нет openssl после apk/apt — install.sh падает на генерации пароля"; exit 126; }
-command -v tar >/dev/null 2>&1 || { echo "⚠ helper: нет tar после apk/apt — install.sh падает на распаковке релиза"; exit 126; }
-set +e
-( cd ${stageInHelper} && bash ./install.sh )
-rv=$?
-set -e
-echo ""
-echo "--- helper завершён code=\${rv} (\$(date -u +%Y-%m-%dT%H:%M:%SZ) UTC) ---"
-exit "\${rv}"
-`.trim();
-
-      const dr = spawn(
-        "docker",
-        [
-          "run",
-          "--rm",
-          "--pull=missing",
-          "-v",
-          "/var/run/docker.sock:/var/run/docker.sock",
-          `-v`,
-          `${dataHost}:/mnt/data`,
-          "-e",
-          "GITHUB_TOKEN",
-          "-e",
-          "GH_TOKEN",
-          "-e",
-          "GIT_TERMINAL_PROMPT",
-          ...(autoAwgProfilesJson ? ["-e", "AWG_PROFILES"] : []),
-          helperImage,
-          "sh",
-          "-lc",
-          sh,
-        ],
-        {
-          detached: true,
-          stdio: "ignore",
-          env: {
-            ...process.env,
-            GITHUB_TOKEN: token,
-            GH_TOKEN: token,
-            GIT_TERMINAL_PROMPT: "0",
-            ...(autoAwgProfilesJson ? { AWG_PROFILES: autoAwgProfilesJson } : {}),
-          },
-        },
-      );
-      dr.unref();
-      dr.once("exit", (code, signal) => finalize(code, signal));
-      dr.once("error", (err) => {
-        console.warn("community-private-install docker-cli helper:", err?.message || err);
-        finalize(null, null, String(err.message || err));
-      });
-    } else {
-      const child = spawn("bash", [scriptPath], {
-        cwd: tmpDir,
-        env: {
-          ...process.env,
-          GITHUB_TOKEN: token,
-          GH_TOKEN: token,
-          GIT_TERMINAL_PROMPT: "0",
-        },
-        stdio: ["ignore", "pipe", "pipe"],
-      });
-      child.stdout.pipe(logStream, { end: false });
-      child.stderr.pipe(logStream, { end: false });
-      child.once("exit", (code, signal) => finalize(code, signal));
-      child.once("error", (err) => {
-        console.warn("community-private-install bash:", err?.message || err);
-        finalize(null, null, String(err.message || err));
-      });
-    }
-
-    res.status(202).json({
-      ok: true,
-      queued: true,
-      message: useDockerCliHelper
-        ? "Установка PRO: отдельный контейнер сначала снимает FREE (освобождается порт панели) и зависший PRO при наличии, затем выполняется install.sh. Подождите 3–10 мин и откройте адрес снова. Журнал: на VPS каталог данных панели (часто /opt/amnezia-admin-data/community-install-last.log)."
-        : "Режим без docker-helper: при «port already allocated» снимите FREE вручную. Журнал: /data/community-install-last.log.",
-      logInsideContainer: "community-install-last.log",
-    });
-  } catch (e) {
-    communityPrivateInstallBusy = false;
-    if (tmpDir) {
-      try {
-        fs.rmSync(tmpDir, { recursive: true, force: true });
-      } catch {
-        //
-      }
-    }
-    const msg =
-      e?.name === "AbortError"
-        ? "Таймаут загрузки install.sh с GitHub."
-        : e?.message || String(e);
-    return res.status(400).json({ error: msg });
-  }
-});
-
-const COMMUNITY_INSTALL_LOG_BASENAME = "community-install-last.log";
-
-function clampCommunityInstallLogRange(name, fallback, minV, maxV) {
-  const x = Number(process.env[name]);
-  if (!Number.isFinite(x)) return fallback;
-  return Math.min(Math.max(Math.trunc(x), minV), maxV);
-}
-
-/**
- * Прочитать кусок `community-install-last.log`: без `since` — хвост (для первого экрана);
- * с `since` — блок байт начиная с offset (до CHUNK байт за запрос).
- */
-app.get("/api/community/install-log", requireAuth, (req, res) => {
-  if (!IS_COMMUNITY || !ALLOW_COMMUNITY_GITHUB_ACTIVATION) {
-    return res.status(403).json({ error: "Недоступно." });
-  }
-  const TAIL_BYTES = clampCommunityInstallLogRange(
-    "COMMUNITY_INSTALL_LOG_TAIL_BYTES",
-    96 * 1024,
-    1024,
-    512 * 1024,
-  );
-  const MAX_CHUNK = clampCommunityInstallLogRange(
-    "COMMUNITY_INSTALL_LOG_API_CHUNK_MAX",
-    512 * 1024,
-    4096,
-    2 * 1024 * 1024,
-  );
-
-  const logPath = path.join(DATA_DIR, COMMUNITY_INSTALL_LOG_BASENAME);
-
-  const sendAbsent = () =>
-    res.json({
-      exists: false,
-      totalBytes: 0,
-      chunk: "",
-      since0: 0,
-      since1: 0,
-      resetSuggested: false,
-    });
-
-  if (!fs.existsSync(logPath)) {
-    sendAbsent();
-    return;
-  }
-
-  let stat;
-  try {
-    stat = fs.statSync(logPath);
-    if (!stat.isFile()) {
-      sendAbsent();
-      return;
-    }
-  } catch {
-    return res.status(500).json({ error: "Не удалось прочитать журнал установки." });
-  }
-
-  const totalBytes = Number(stat.size) || 0;
-  let sinceParsed = NaN;
-  const q = req.query.since;
-  if (typeof q === "string" && q.trim() !== "") {
-    sinceParsed = Number(q.trim());
-  }
-  let resetSuggested = false;
-  let sinceByte;
-  if (!Number.isFinite(sinceParsed) || sinceParsed < 0) {
-    sinceByte = Math.max(0, totalBytes - TAIL_BYTES);
-  } else if (sinceParsed > totalBytes) {
-    resetSuggested = true;
-    sinceByte = Math.max(0, totalBytes - TAIL_BYTES);
-  } else {
-    sinceByte = sinceParsed;
-  }
-
-  const readable = Math.max(0, totalBytes - sinceByte);
-  const readLen = Math.min(readable, MAX_CHUNK);
-  if (readLen === 0 || totalBytes <= 0) {
-    res.json({
-      exists: true,
-      totalBytes,
-      chunk: "",
-      since0: sinceByte,
-      since1: sinceByte,
-      resetSuggested,
-    });
-    return;
-  }
-
-  let chunkBuf = Buffer.alloc(readLen);
-  try {
-    const fd = fs.openSync(logPath, "r");
-    try {
-      fs.readSync(fd, chunkBuf, 0, readLen, sinceByte);
-    } finally {
-      fs.closeSync(fd);
-    }
-  } catch {
-    return res.status(500).json({ error: "Ошибка чтения журнала установки." });
-  }
-
-  res.json({
-    exists: true,
-    totalBytes,
-    chunk: chunkBuf.toString("utf8"),
-    since0: sinceByte,
-    since1: sinceByte + readLen,
-    resetSuggested,
-  });
-});
-
 app.get("/health", (_req, res) => {
   res.json({ ok: true, version: PANEL_VERSION });
 });
@@ -2262,17 +1674,8 @@ app.get("/api/server-time", requireAuth, (req, res) => {
 });
 
 app.get("/api/time-sync-capabilities", requireAuth, (_req, res) => {
-  if (IS_COMMUNITY) {
-    res.json({
-      hostTimeSync: false,
-      sshHost: process.env.TIME_SYNC_SSH_HOST?.trim() || "172.17.0.1",
-      serverClockTimeZone: resolveServerClockTimeZone(),
-      communityBlocked: true,
-    });
-    return;
-  }
   res.json({
-    hostTimeSync: hostTimeSyncConfigured(),
+    hostTimeSync: false,
     sshHost: process.env.TIME_SYNC_SSH_HOST?.trim() || "172.17.0.1",
     serverClockTimeZone: resolveServerClockTimeZone(),
   });
@@ -2520,6 +1923,166 @@ app.post("/api/warp/host-setup", requireAuth, requireProTier, async (req, res) =
   }
 });
 
+function safeSshInstallDirOrDefault() {
+  try {
+    return assertSafeUnixPath(process.env.WARP_SSH_INSTALL_DIR?.trim() || "/opt/amnezia-admin");
+  } catch {
+    return "/opt/amnezia-admin";
+  }
+}
+
+function assertPort512_65535(raw, fallback = 40000) {
+  if (raw == null || raw === "") return fallback;
+  const n = typeof raw === "number" ? raw : Number.parseInt(String(raw).trim(), 10);
+  if (!Number.isFinite(n) || n < 512 || n > 65535) {
+    throw new Error("Порт: целое 512 … 65535.");
+  }
+  return n;
+}
+
+async function sshRunWarpCf(pw, action, { socksPort, licenseKey } = {}) {
+  const host = process.env.TIME_SYNC_SSH_HOST?.trim() || "172.17.0.1";
+  const installDir = safeSshInstallDirOrDefault();
+  const port = socksPort != null ? assertPort512_65535(socksPort, 40000) : 40000;
+  const key = typeof licenseKey === "string" ? licenseKey.trim() : "";
+
+  let scriptCall = "";
+  if (action === "install") scriptCall = `./scripts/warp-install-cf.sh install ${port}`;
+  if (action === "uninstall") scriptCall = `./scripts/warp-install-cf.sh uninstall`;
+  if (action === "status") scriptCall = `./scripts/warp-install-cf.sh status`;
+  if (action === "license") {
+    if (!key) throw new Error("WARP+ ключ обязателен.");
+    const q = key.replace(/'/g, "'\\''");
+    scriptCall = `./scripts/warp-install-cf.sh license '${q}'`;
+  }
+  if (!scriptCall) throw new Error("bad action");
+
+  const remoteCmd = `bash -lc 'cd ${installDir} && chmod +x scripts/warp-install-cf.sh 2>/dev/null || true && ${scriptCall}'`;
+  return await sshRootRun(pw.trim(), host, remoteCmd);
+}
+
+app.post("/api/warp-cf/install", requireAuth, requireProTier, async (req, res) => {
+  const pw = req.body?.rootPassword;
+  if (typeof pw !== "string" || !pw.trim()) return res.status(400).json({ error: "Укажите пароль root VPS" });
+  if (!hostTimeSyncConfigured()) {
+    return res.status(503).json({ error: `Недоступно: нет sshpass или TIME_SYNC_DISABLED=1. ${MSG_WARP_CF_HELP}` });
+  }
+  try {
+    const socksPort = assertPort512_65535(req.body?.socksPort, 40000);
+    const out = await sshRunWarpCf(pw, "install", { socksPort });
+    res.json({ ok: true, output: out.slice(0, 12_000), socksPort });
+  } catch (e) {
+    res.status(400).json({ error: String(e.message || e) });
+  }
+});
+
+app.post("/api/warp-cf/uninstall", requireAuth, requireProTier, async (req, res) => {
+  const pw = req.body?.rootPassword;
+  if (typeof pw !== "string" || !pw.trim()) return res.status(400).json({ error: "Укажите пароль root VPS" });
+  if (!hostTimeSyncConfigured()) {
+    return res.status(503).json({ error: `Недоступно: нет sshpass или TIME_SYNC_DISABLED=1. ${MSG_WARP_CF_HELP}` });
+  }
+  try {
+    const out = await sshRunWarpCf(pw, "uninstall");
+    res.json({ ok: true, output: out.slice(0, 12_000) });
+  } catch (e) {
+    res.status(400).json({ error: String(e.message || e) });
+  }
+});
+
+app.post("/api/warp-cf/license", requireAuth, requireProTier, async (req, res) => {
+  const pw = req.body?.rootPassword;
+  const key = req.body?.licenseKey;
+  if (typeof pw !== "string" || !pw.trim()) return res.status(400).json({ error: "Укажите пароль root VPS" });
+  if (typeof key !== "string" || !key.trim()) return res.status(400).json({ error: "Укажите WARP+ ключ" });
+  if (!hostTimeSyncConfigured()) {
+    return res.status(503).json({ error: `Недоступно: нет sshpass или TIME_SYNC_DISABLED=1. ${MSG_WARP_CF_HELP}` });
+  }
+  try {
+    const out = await sshRunWarpCf(pw, "license", { licenseKey: key });
+    res.json({ ok: true, output: out.slice(0, 12_000) });
+  } catch (e) {
+    res.status(400).json({ error: String(e.message || e) });
+  }
+});
+
+app.post("/api/warp-cf/status", requireAuth, requireProTier, async (req, res) => {
+  const pw = req.body?.rootPassword;
+  if (typeof pw !== "string" || !pw.trim()) return res.status(400).json({ error: "Укажите пароль root VPS" });
+  if (!hostTimeSyncConfigured()) {
+    return res.status(503).json({ error: `Недоступно: нет sshpass или TIME_SYNC_DISABLED=1. ${MSG_WARP_CF_HELP}` });
+  }
+  try {
+    const raw = await sshRunWarpCf(pw, "status");
+    let parsed = null;
+    try {
+      parsed = JSON.parse(String(raw || "").trim());
+    } catch {
+      parsed = null;
+    }
+    if (!parsed || typeof parsed !== "object") {
+      return res.json({
+        installed: false,
+        running: false,
+        mode: "",
+        proxyPort: null,
+        account: "",
+        rawStatus: String(raw || "").slice(0, 12_000),
+        rawAccount: "",
+      });
+    }
+    res.json(parsed);
+  } catch (e) {
+    res.status(400).json({ error: String(e.message || e) });
+  }
+});
+
+app.post("/api/warp-cf/xray-apply", requireAuth, requireProTier, async (req, res) => {
+  const pw = req.body?.rootPassword;
+  const filePath = req.body?.filePath;
+  const socksAddress = req.body?.socksAddress;
+  if (typeof pw !== "string" || !pw.trim()) return res.status(400).json({ error: "Укажите пароль root VPS" });
+  if (typeof filePath !== "string" || !filePath.trim()) return res.status(400).json({ error: "Укажите filePath" });
+  if (typeof socksAddress !== "string" || !socksAddress.trim()) {
+    return res.status(400).json({ error: "Укажите socksAddress (127.0.0.1 или 172.17.0.1)" });
+  }
+  if (!hostTimeSyncConfigured()) {
+    return res.status(503).json({ error: `Недоступно: нет sshpass или TIME_SYNC_DISABLED=1. ${MSG_WARP_CF_HELP}` });
+  }
+  let port;
+  try {
+    port = assertPort512_65535(req.body?.socksPort, 40000);
+  } catch (e) {
+    return res.status(400).json({ error: String(e.message || e) });
+  }
+  const domains = typeof req.body?.domains === "string" ? req.body.domains.trim() : "";
+  try {
+    const host = process.env.TIME_SYNC_SSH_HOST?.trim() || "172.17.0.1";
+    const installDir = safeSshInstallDirOrDefault();
+    const f = assertSafeUnixPath(filePath.trim());
+    const addr = socksAddress.trim();
+    if (!/^(127\.0\.0\.1|172\.17\.0\.1)$/.test(addr)) {
+      return res.status(400).json({ error: "socksAddress: разрешено только 127.0.0.1 или 172.17.0.1" });
+    }
+    const dom = domains.replace(/'/g, "'\\''");
+    const remoteCmd =
+      `bash -lc 'cd ${installDir} && chmod +x scripts/xray-warp-apply.py 2>/dev/null || true && ` +
+      `python3 ./scripts/xray-warp-apply.py --file '${f.replace(/'/g, "'\\''")}' --address '${addr}' --port ${port}` +
+      (dom ? ` --domains '${dom}'` : "") +
+      `'`;
+    const out = await sshRootRun(pw.trim(), host, remoteCmd);
+    let parsed = null;
+    try {
+      parsed = JSON.parse(String(out || "").trim());
+    } catch {
+      parsed = null;
+    }
+    res.json(parsed || { ok: true, raw: String(out || "").slice(0, 12_000) });
+  } catch (e) {
+    res.status(400).json({ error: String(e.message || e) });
+  }
+});
+
 app.post("/api/login", (req, res) => {
   const pw = req.body?.password;
   if (typeof pw !== "string" || !pw) {
@@ -2566,9 +2129,7 @@ app.get("/api/protocols", requireAuth, (req, res) => {
   const rt = runtimeForRequest(req);
   const hintSingle =
     PROFILES.length < 2
-      ? IS_COMMUNITY
-        ? "Один инстанс в интерфейсе. Несколько контейнеров и профиль AWG_PROFILES — в полной панели PRO."
-        : "Сейчас один инстанс: при установке не передали AWG_PROFILES или не восстановился снимок. Задайте JSON профилей и запустите install.sh — он сохранится в /root/amnezia-admin.awg-profiles.json."
+      ? "Сейчас один инстанс: при установке не передали AWG_PROFILES или не восстановился снимок. Задайте JSON профилей и запустите install.sh — он сохранится в /root/amnezia-admin.awg-profiles.json."
       : "";
   res.json({
     currentId: rt.profile.id,
@@ -2668,14 +2229,8 @@ app.get("/api/clients", requireAuth, async (req, res) => {
 });
 
 async function serveClientConfigExport(req, res) {
-  if (IS_COMMUNITY) {
-    res.status(403).json({
-      error: "Экспорт .conf доступен в версии PRO.",
-      upgradeRequired: true,
-      upgradeUrl: COMMUNITY_UPGRADE_URL,
-    });
-    return;
-  }
+  rejectUnavailableFeature(res);
+  return;
   const tokenOk =
     req.method === "GET" &&
     verifyExportQueryToken(typeof req.query.token === "string" ? req.query.token : "");
@@ -3131,7 +2686,7 @@ app.use((req, res) => {
       error: "Not found",
       path: `${req.originalUrl || req.path}`,
       hint:
-        "Эндпоинта нет на этом процессе. Проверьте версию приложения через GET /health на том же хосту:порту, что панель, и что HTTP-прокси (если есть) проксирует префикс /api/*. После перехода на PRO пересоберите образ amnezia-admin из актуального релиза репозитория.",
+        "Эндпоинта нет на этом процессе. Проверьте версию приложения через GET /health на том же хосту:порту, что панель, и что HTTP-прокси (если есть) проксирует префикс /api/*. Пересоберите образ amnezia-admin из актуального релиза репозитория.",
     });
     return;
   }
@@ -3144,13 +2699,7 @@ app.listen(PORT, "0.0.0.0", () => {
 });
 
 setInterval(() => {
-  if (!IS_COMMUNITY) {
-    processAllScheduledDisconnects().catch((e) => console.error("scheduleDisconnect:", e));
-  }
+  /* scheduled disconnects not available in basic panel */
 }, SCHEDULER_MS);
 
-setTimeout(() => {
-  if (!IS_COMMUNITY) {
-    processAllScheduledDisconnects().catch((e) => console.error("scheduleDisconnect:", e));
-  }
-}, 4000);
+

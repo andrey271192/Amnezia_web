@@ -21,6 +21,18 @@ const warpActionsEl = document.querySelector("#warp-actions");
 const warpClientListEl = document.querySelector("#warp-client-list");
 const warpWgShowEl = document.querySelector("#warp-wg-show");
 
+const warpCfPanel = document.querySelector("#warp-cf-panel");
+const warpCfStatusLine = document.querySelector("#warp-cf-status-line");
+const warpCfActionsEl = document.querySelector("#warp-cf-actions");
+const warpCfLogEl = document.querySelector("#warp-cf-log");
+const warpCfRootPw = document.querySelector("#warp-cf-root-pw");
+const warpCfPort = document.querySelector("#warp-cf-port");
+const warpCfLicense = document.querySelector("#warp-cf-license");
+const warpCfXrayPath = document.querySelector("#warp-cf-xray-path");
+const warpCfDomains = document.querySelector("#warp-cf-domains");
+const warpCfBanner = document.querySelector("#warp-cf-banner");
+const warpCfPresetsEl = document.querySelector("#warp-cf-presets");
+
 const mtprotoPanel = document.querySelector("#mtproto-panel");
 const mtprotoStatusLine = document.querySelector("#mtproto-status-line");
 const mtprotoActionsEl = document.querySelector("#mtproto-actions");
@@ -74,353 +86,27 @@ let warpSshPendingCmd = null;
 /** Какие панели скрыты настройкой сервера (`UI_HIDE_SECTIONS`). */
 let uiHidden = { users: false, warp: false, cascade: false, mtproto: false };
 
-const editionBanner = document.querySelector("#edition-banner");
-const DEFAULT_HEADER_SUB = document.querySelector(".top .sub")?.textContent?.trim() || "";
-
-/** POLL для живого журнала установки PRO (@type {number | null}) */
-let communityInstallLogInterval = null;
-/** Следующий offset для GET /api/community/install-log (@type {number | null}) */
-let communityInstallLogSince = null;
-/** Аккумулированный текст (дополняется кусками) */
-let communityInstallLogShown = "";
-
-function stopCommunityInstallLogPolling() {
-  if (communityInstallLogInterval !== null) {
-    clearInterval(communityInstallLogInterval);
-    communityInstallLogInterval = null;
-  }
-}
-
-async function pollCommunityInstallLogOnce() {
-  const pre = editionBanner?.querySelector(".edition-banner-install-pre");
-  const statusLine = editionBanner?.querySelector(".edition-banner-install-status");
-  if (!pre || !editionBanner?.querySelector(".edition-banner-install-log")) {
-    stopCommunityInstallLogPolling();
-    return;
-  }
-
-  try {
-    const url =
-      communityInstallLogSince === null
-        ? "/api/community/install-log"
-        : `/api/community/install-log?since=${encodeURIComponent(String(communityInstallLogSince))}`;
-    const r = await fetch(url, { credentials: "same-origin" });
-    const j = await r.json().catch(() => null);
-    if (!r.ok) {
-      if (statusLine) {
-        statusLine.textContent =
-          typeof j?.error === "string" ? j.error : `Ошибка ${r.status}`;
-        statusLine.classList.add("err");
-      }
-      return;
-    }
-    if (statusLine) {
-      statusLine.classList.remove("err");
-      if (!j.exists) {
-        statusLine.textContent =
-          communityInstallLogSince === null ? "Журнал пока пустой — секунду…" : "Обновление…";
-      } else if (communityInstallLogSince === null && j.totalBytes > j.since1) {
-        statusLine.textContent = `Хвост журнала (${fmtBytesRu(Math.max(j.since1 - j.since0, 0))} из ~${fmtBytesRu(j.totalBytes)}) · автообновление…`;
-      } else {
-        statusLine.textContent = `Размер журнала ≈ ${fmtBytesRu(j.totalBytes)} · автообновление каждые 2 с…`;
-      }
-    }
-
-    const chunk = typeof j.chunk === "string" ? j.chunk : "";
-    if (!j.exists) return;
-
-    const replace = Boolean(j.resetSuggested || communityInstallLogSince === null);
-    if (replace) communityInstallLogShown = chunk;
-    else communityInstallLogShown += chunk;
-
-    pre.textContent = communityInstallLogShown;
-    communityInstallLogSince = typeof j.since1 === "number" ? j.since1 : communityInstallLogSince;
-    pre.scrollTop = pre.scrollHeight;
-  } catch (_e) {
-    if (statusLine) {
-      statusLine.textContent = "Не удалось запросить журнал (сеть).";
-      statusLine.classList.add("err");
-    }
-  }
-}
-
-function fmtBytesRu(n) {
-  const x = Number(n);
-  if (!Number.isFinite(x)) return "";
-  if (x < 1024) return `${Math.round(x)} B`;
-  if (x < 1024 * 1024) return `${Math.round(x / 102.4) / 10} KiB`;
-  return `${Math.round(x / (1024 * 102.4)) / 10} MiB`;
-}
-
-/** Ссылки доната и Telegram‑спонсора: шапка + подвал панели (`GET /api/panel/footer`). */
-function wirePanelPromoAnchor(el, url, label) {
-  const u = typeof url === "string" ? url.trim() : "";
-  const lb = typeof label === "string" ? label.trim() : "";
-  if (!el || !u || !lb) {
-    if (el) {
-      el.classList.add("hidden");
-      el.removeAttribute("href");
-      el.textContent = "";
-    }
-    return false;
-  }
-  el.href = u;
-  el.textContent = lb;
-  el.classList.remove("hidden");
-  return true;
-}
-
-async function hydratePanelPromoFooter() {
-  const strip = document.getElementById("panel-promo-strip");
-  const sub = document.getElementById("panel-promo-subtitle");
-  const aDonTop = document.getElementById("panel-strip-donate");
-  const sepDO = document.getElementById("panel-strip-sep-donate-ozon");
-  const aOzonTop = document.getElementById("panel-strip-ozon");
-  const sepOT = document.getElementById("panel-strip-sep-ozon-tg");
-  const aTgTop = document.getElementById("panel-strip-telegram");
-  const gap1 = document.getElementById("footer-promo-gap1");
-  const aDonF = document.getElementById("footer-promo-donate");
-  const fSepDO = document.getElementById("footer-promo-sep-donate-ozon");
-  const aOzonF = document.getElementById("footer-promo-ozon");
-  const fSepOT = document.getElementById("footer-promo-sep-ozon-tg");
-  const aTgF = document.getElementById("footer-promo-telegram");
-
-  try {
-    const r = await fetch("/api/panel/footer", { credentials: "same-origin" });
-    if (!r.ok) return;
-    const j = await r.json().catch(() => null);
-    if (!j || typeof j !== "object") return;
-
-    const subtitle = typeof j.promoSubtitle === "string" ? j.promoSubtitle.trim() : "";
-    if (sub) sub.textContent = subtitle;
-
-    const okD = wirePanelPromoAnchor(aDonTop, j.donateUrl, j.donateLabel);
-    const okO = wirePanelPromoAnchor(aOzonTop, j.ozonUrl, j.ozonLabel);
-    const okT = wirePanelPromoAnchor(aTgTop, j.telegramUrl, j.telegramLabel);
-
-    if (sepDO) sepDO.classList.toggle("hidden", !(okD && (okO || okT)));
-    if (sepOT) sepOT.classList.toggle("hidden", !(okO && okT));
-
-    wirePanelPromoAnchor(aDonF, j.donateUrl, j.donateLabel);
-    wirePanelPromoAnchor(aOzonF, j.ozonUrl, j.ozonLabel);
-    wirePanelPromoAnchor(aTgF, j.telegramUrl, j.telegramLabel);
-
-    const footerD = aDonF && !aDonF.classList.contains("hidden");
-    const footerO = aOzonF && !aOzonF.classList.contains("hidden");
-    const footerT = aTgF && !aTgF.classList.contains("hidden");
-
-    if (gap1) gap1.classList.toggle("hidden", !(footerD || footerO || footerT));
-    if (fSepDO) fSepDO.classList.toggle("hidden", !(footerD && (footerO || footerT)));
-    if (fSepOT) fSepOT.classList.toggle("hidden", !(footerO && footerT));
-
-    if (strip) strip.classList.remove("hidden");
-  } catch {
-    /* офлайн или сбой — в HTML уже дефолтные ссылки шапки/подвала */
-  }
-}
-
-function ensureEditionBannerInstallLogPanel() {
-  if (!editionBanner) return null;
-  let wrap = editionBanner.querySelector(".edition-banner-install-log");
-  if (!wrap) {
-    wrap = document.createElement("div");
-    wrap.className = "edition-banner-install-log";
-    const hdr = document.createElement("div");
-    hdr.className = "edition-banner-install-log-head";
-    hdr.innerHTML =
-      '<span class="muted">Журнал установки</span> <button type="button" class="btn small ghost edition-install-log-pause" title="Пауза обновления">Пауза</button>';
-
-    const statusLine = document.createElement("div");
-    statusLine.className = "edition-banner-install-status muted small";
-    statusLine.textContent = "Запрос журнала…";
-
-    const pre = document.createElement("pre");
-    pre.className = "edition-banner-install-pre monospace";
-
-    hdr.querySelector(".edition-install-log-pause")?.addEventListener("click", () => {
-      const btn = hdr.querySelector(".edition-install-log-pause");
-      if (!btn || !editionBanner.contains(wrap)) return;
-      const paused = btn.dataset.paused === "1";
-      if (paused) {
-        btn.dataset.paused = "";
-        btn.textContent = "Пауза";
-        startCommunityInstallLogPollingResume();
-      } else {
-        btn.dataset.paused = "1";
-        btn.textContent = "Продолжить";
-        stopCommunityInstallLogPolling();
-      }
-    });
-
-    wrap.append(hdr, statusLine, pre);
-    editionBanner.querySelector(".edition-banner-activation")?.appendChild(wrap);
-  }
-  return wrap;
-}
-
-function startCommunityInstallLogPollingResume() {
-  stopCommunityInstallLogPolling();
-  void pollCommunityInstallLogOnce();
-  communityInstallLogInterval = window.setInterval(() => {
-    void pollCommunityInstallLogOnce();
-  }, 2000);
-}
-
-/** Сброс и показ живого журнала (после «Установить PRO»). */
-function startCommunityInstallLogPollingFresh() {
-  communityInstallLogSince = null;
-  communityInstallLogShown = "";
-  const wrap = ensureEditionBannerInstallLogPanel();
-  const pre = wrap?.querySelector(".edition-banner-install-pre");
-  const st = wrap?.querySelector(".edition-banner-install-status");
-  if (pre) pre.textContent = "";
-  if (st) {
-    st.classList.remove("err");
-    st.textContent = "Запрос журнала…";
-  }
-  startCommunityInstallLogPollingResume();
-}
-
-/** Состояние редакции панели (community = просмотр + удаление; остальные мутации — PRO). */
+/** Базовые возможности панели (просмотр клиентов + удаление). */
 let editionState = {
-  tier: "pro",
-  readOnlyClients: false,
-  allowDeleteClients: false,
-  upgradeUrl: null,
-  upgradePitch: null,
-  showDebugWg: true,
-  githubActivationAllowed: false,
+  readOnlyClients: true,
+  allowDeleteClients: true,
+  showDebugWg: false,
 };
 
 function applyEditionPayload(data) {
   const ed = data?.edition;
   if (!ed || typeof ed !== "object") return;
   editionState = {
-    tier: ed.tier === "community" ? "community" : "pro",
-    readOnlyClients: Boolean(ed.readOnlyClients),
-    allowDeleteClients: Boolean(ed.allowDeleteClients),
-    upgradeUrl: typeof ed.upgradeUrl === "string" ? ed.upgradeUrl : null,
-    upgradePitch: typeof ed.upgradePitch === "string" ? ed.upgradePitch : null,
-    showDebugWg: ed.showDebugWg !== false,
-    githubActivationAllowed: Boolean(ed.githubActivationAllowed),
+    readOnlyClients: ed.readOnlyClients !== false,
+    allowDeleteClients: ed.allowDeleteClients !== false,
+    showDebugWg: Boolean(ed.showDebugWg),
   };
   const titleEl = document.querySelector(".top h1");
-  if (titleEl) {
-    titleEl.textContent =
-      editionState.tier === "community"
-        ? "Пользователи AmneziaWG FREE"
-        : "Пользователи AmneziaWG PRO";
-  }
+  if (titleEl) titleEl.textContent = "Пользователи AmneziaWG";
   const subEl = document.querySelector(".top .sub");
   if (subEl) {
-    if (editionState.tier === "community") {
-      subEl.textContent =
-        "Базовая панель amnezia_web: просмотр клиентов и статусов, удаление клиента с сервера, установка Telegram MTProto‑прокси (Docker) в этом интерфейсе. Включение/выключение туннеля, даты, переименование, экспорт .conf, каскад, Cloudflare WARP и синхронизация времени хоста — в версии PRO.";
-    } else {
-      subEl.textContent = DEFAULT_HEADER_SUB;
-    }
-  }
-  if (editionBanner) {
-    if (editionState.tier === "community") {
-      const preservedInstallLog = editionBanner.querySelector(".edition-banner-install-log");
-      editionBanner.classList.remove("hidden");
-      editionBanner.innerHTML = "";
-      const wrap = document.createElement("div");
-      wrap.className = "edition-banner-inner";
-      const textCol = document.createElement("div");
-      textCol.className = "edition-banner-text";
-      const strong = document.createElement("strong");
-      strong.textContent = "Базовая версия · просмотр и удаление клиентов";
-      const pitch = document.createElement("p");
-      pitch.className = "edition-banner-pitch muted";
-      pitch.textContent = editionState.upgradePitch || "";
-      textCol.append(strong, pitch);
-      const cta = document.createElement("a");
-      cta.className = "btn small primary edition-banner-cta";
-      cta.rel = "noopener noreferrer";
-      cta.target = "_blank";
-      cta.href =
-        editionState.upgradeUrl ||
-        "https://boosty.to/andrey27/purchase/3906453?ssource=DIRECT&share=subscription_link";
-      cta.textContent = "Разблокировать PRO (Boosty)";
-      wrap.append(textCol, cta);
-      editionBanner.appendChild(wrap);
-
-      {
-        const act = document.createElement("div");
-        act.className = "edition-banner-activation muted";
-        const cap = document.createElement("div");
-        cap.className = "edition-banner-act-title";
-        cap.textContent =
-          "Есть GitHub‑токен к приватному репозиторию PRO? Вставьте ниже — установка заменит FREE на PRO (порт сохранится):";
-
-        const row = document.createElement("div");
-        row.className = "edition-banner-act-row";
-
-        const inp = document.createElement("input");
-        inp.type = "password";
-        inp.autocomplete = "new-password";
-        inp.spellcheck = false;
-        inp.placeholder = "GitHub PAT (classic: repo или fine‑grained: Contents Read)";
-        inp.className = "edition-banner-act-input monospace";
-
-        const go = document.createElement("button");
-        go.type = "button";
-        go.className = "btn small primary";
-        go.textContent = "Установить PRO";
-
-        const msg = document.createElement("p");
-        msg.className = "edition-banner-act-msg muted";
-        msg.setAttribute("role", "status");
-        msg.textContent = "";
-
-        go.addEventListener("click", async () => {
-          msg.textContent = "";
-          msg.className = "edition-banner-act-msg muted";
-          const tok = inp.value.trim();
-          if (!tok) {
-            msg.className = "edition-banner-act-msg status err";
-            msg.textContent = "Вставьте токен.";
-            return;
-          }
-          go.disabled = true;
-          try {
-            const r = await fetch("/api/community/run-private-install", {
-              method: "POST",
-              credentials: "same-origin",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ githubToken: tok }),
-            });
-            const j = await r.json().catch(() => ({}));
-            if (!r.ok) {
-              msg.className = "edition-banner-act-msg status err";
-              msg.textContent = j.error || `Ошибка ${r.status}`;
-              go.disabled = false;
-              return;
-            }
-            msg.className = "edition-banner-act-msg edition-act-ok muted";
-            msg.textContent =
-              j.message ||
-              "Установка запущена. Через 2–5 минут откройте панель снова по тому же адресу (или несколько раз обновите страницу).";
-            inp.value = "";
-            startCommunityInstallLogPollingFresh();
-          } catch (e) {
-            msg.className = "edition-banner-act-msg status err";
-            msg.textContent = String(e?.message || e);
-            go.disabled = false;
-          }
-        });
-
-        row.append(inp, go);
-        act.append(cap, row, msg);
-        if (preservedInstallLog) act.appendChild(preservedInstallLog);
-        editionBanner.appendChild(act);
-      }
-    } else {
-      stopCommunityInstallLogPolling();
-      editionBanner.classList.add("hidden");
-      editionBanner.innerHTML = "";
-    }
+    subEl.textContent =
+      "Базовая панель: просмотр клиентов и статусов, удаление клиента с сервера, установка Telegram MTProto‑прокси (Docker).";
   }
   document.querySelector(".clock-host-sync")?.classList.toggle("hidden", editionState.readOnlyClients);
   if (wgRawDetails) wgRawDetails.hidden = uiHidden.users || !editionState.showDebugWg;
@@ -627,6 +313,7 @@ function applyUiHiddenFromPayload(data) {
   if (wgRawDetails) wgRawDetails.hidden = uiHidden.users || !editionState.showDebugWg;
   if (cascadePanel) cascadePanel.hidden = uiHidden.cascade;
   if (warpPanel) warpPanel.hidden = uiHidden.warp;
+  if (warpCfPanel) warpCfPanel.hidden = editionState.readOnlyClients;
   if (mtprotoPanel) mtprotoPanel.hidden = uiHidden.mtproto;
   void refreshMtprotoPanel();
 }
@@ -1090,10 +777,10 @@ async function loadTimeSyncCaps() {
   const btn = document.querySelector("#sync-host-time");
   try {
     const c = await api("/api/time-sync-capabilities");
-    if (editionState.readOnlyClients || c.communityBlocked) {
+    if (editionState.readOnlyClients) {
       if (hint) {
         hint.textContent =
-          "В базовой версии синхронизация времени хоста по SSH недоступна — это функция PRO.";
+          "Синхронизация времени хоста по SSH недоступна в базовой версии панели.";
       }
       if (btn) btn.disabled = true;
       return;
@@ -1216,7 +903,7 @@ function renderRows(clients) {
       roHint.className = "muted hint-mini";
       roHint.style.margin = "0.35rem 0 0";
       roHint.textContent = c.exportAvailable
-        ? "На сервере есть данные для .conf — скачивание доступно в PRO."
+        ? "На сервере есть данные для .conf — экспорт недоступен в базовой версии."
         : "Нет last_config на сервере — полный конфиг в приложении Amnezia.";
       nameWrap.appendChild(roHint);
     }
@@ -1258,13 +945,13 @@ function renderRows(clients) {
         note.className = "muted";
         note.style.fontSize = "0.85rem";
         note.style.marginBottom = "0.35rem";
-        note.textContent = "Вкл/выкл, даты, переименование, экспорт — PRO";
+        note.textContent = "Вкл/выкл, даты, переименование, экспорт недоступны";
         actTd.appendChild(note);
         actTd.appendChild(btn("Удалить", "btn small warn", () => confirmDelete(c.name, c.clientId)));
       } else {
         const lock = document.createElement("span");
         lock.className = "muted";
-        lock.textContent = "Только PRO";
+        lock.textContent = "Недоступно";
         actTd.appendChild(lock);
       }
     } else {
@@ -1487,6 +1174,217 @@ function renderWarpPanel(data) {
   );
 }
 
+function normalizeWarpCfPort() {
+  const raw = warpCfPort?.value?.trim();
+  const n = raw ? Number.parseInt(raw, 10) : 40000;
+  if (!Number.isFinite(n) || n < 512 || n > 65535) return 40000;
+  return n;
+}
+
+function warpCfPresetText(port) {
+  const p = Number(port) || 40000;
+  return (
+    "### 3x-ui / Xray (на хосте)\n" +
+    "SOCKS5 адрес: 127.0.0.1:" + p + "\n\n" +
+    "Outbound (пример):\n" +
+    "{\n" +
+    '  \"tag\": \"warp-socks\",\n' +
+    '  \"protocol\": \"socks\",\n' +
+    '  \"settings\": {\"servers\": [{\"address\": \"127.0.0.1\", \"port\": ' + p + '}]}\n' +
+    "}\n\n" +
+    "Routing rule (пример):\n" +
+    "{\n" +
+    '  \"type\": \"field\",\n' +
+    '  \"outboundTag\": \"warp-socks\",\n' +
+    '  \"domain\": [\"geosite:google\", \"geosite:openai\"]\n' +
+    "}\n\n" +
+    "### Amnezia (xray в Docker)\n" +
+    "SOCKS5 адрес: 172.17.0.1:" + p + "  (из контейнера до хоста)\n\n" +
+    "Outbound (пример):\n" +
+    "{\n" +
+    '  \"tag\": \"warp-socks\",\n' +
+    '  \"protocol\": \"socks\",\n' +
+    '  \"settings\": {\"servers\": [{\"address\": \"172.17.0.1\", \"port\": ' + p + '}]}\n' +
+    "}\n"
+  );
+}
+
+function redrawWarpCfPresets() {
+  if (!warpCfPresetsEl) return;
+  warpCfPresetsEl.textContent = warpCfPresetText(normalizeWarpCfPort());
+}
+
+async function refreshWarpCfPanel() {
+  if (!warpCfPanel || !warpCfStatusLine || !warpCfActionsEl || !warpCfLogEl) return;
+  if (editionState.readOnlyClients) {
+    warpCfPanel.hidden = true;
+    return;
+  }
+  warpCfPanel.hidden = false;
+  redrawWarpCfPresets();
+
+  warpCfActionsEl.innerHTML = "";
+  if (warpCfBanner) {
+    warpCfBanner.classList.add("hidden");
+    warpCfBanner.textContent = "";
+  }
+
+  const pw = String(warpCfRootPw?.value || "").trim();
+  const port = normalizeWarpCfPort();
+
+  const explain = document.createElement("p");
+  explain.className = "muted warp-muted";
+  explain.textContent =
+    "Для статуса/установки/удаления нужен пароль root по SSH на хост VPS. Пароль не сохраняется — вводите при каждом действии.";
+  warpCfActionsEl.appendChild(explain);
+
+  warpCfActionsEl.appendChild(
+    btn("Статус", "btn small ghost", async () => {
+      try {
+        if (!pw) throw new Error("Введите пароль root.");
+        setStatus("WARP (официальный): статус…", false);
+        warpCfLogEl.textContent = "Запрос статуса…";
+        const j = await api("/api/warp-cf/status", {
+          method: "POST",
+          body: JSON.stringify({ rootPassword: pw }),
+        });
+        warpCfStatusLine.textContent =
+          j.installed
+            ? `${j.running ? "подключён" : "не подключён"} · mode ${j.mode || "?"}` +
+              (j.proxyPort ? ` · SOCKS :${j.proxyPort}` : "") +
+              (j.account ? ` · ${j.account}` : "")
+            : "не установлен";
+        warpCfLogEl.textContent = (j.rawStatus || "") + (j.rawAccount ? "\n\n--- account ---\n" + j.rawAccount : "");
+        setStatus("", false);
+      } catch (e) {
+        setStatus(String(e?.message || e), true);
+      }
+    }),
+  );
+
+  warpCfActionsEl.appendChild(
+    btn("Установить (proxy mode)", "btn small primary", async () => {
+      try {
+        if (!pw) throw new Error("Введите пароль root.");
+        if (!confirm(`Установить официальный Cloudflare WARP на хост VPS и поднять SOCKS5 на 127.0.0.1:${port}?`)) {
+          return;
+        }
+        setStatus("WARP (официальный): установка…", false);
+        warpCfLogEl.textContent = "Установка…";
+        const j = await api("/api/warp-cf/install", {
+          method: "POST",
+          body: JSON.stringify({ rootPassword: pw, socksPort: port }),
+        });
+        warpCfLogEl.textContent = j.output || "Готово.";
+        if (warpCfBanner) {
+          warpCfBanner.textContent = `Готово: SOCKS5 на 127.0.0.1:${port}`;
+          warpCfBanner.classList.remove("hidden");
+        }
+        setStatus("", false);
+      } catch (e) {
+        setStatus(String(e?.message || e), true);
+      }
+    }),
+  );
+
+  warpCfActionsEl.appendChild(
+    btn("Применить WARP+ ключ", "btn small ghost", async () => {
+      try {
+        if (!pw) throw new Error("Введите пароль root.");
+        const key = String(warpCfLicense?.value || "").trim();
+        if (!key) throw new Error("Вставьте WARP+ ключ.");
+        setStatus("WARP (официальный): применяю ключ…", false);
+        warpCfLogEl.textContent = "Применение ключа…";
+        const j = await api("/api/warp-cf/license", {
+          method: "POST",
+          body: JSON.stringify({ rootPassword: pw, licenseKey: key }),
+        });
+        warpCfLogEl.textContent = j.output || "Ключ применён.";
+        if (warpCfLicense) warpCfLicense.value = "";
+        setStatus("", false);
+      } catch (e) {
+        setStatus(String(e?.message || e), true);
+      }
+    }),
+  );
+
+  warpCfActionsEl.appendChild(
+    btn("Удалить", "btn small warn", async () => {
+      try {
+        if (!pw) throw new Error("Введите пароль root.");
+        if (!confirm("Удалить официальный Cloudflare WARP с хоста VPS (apt remove cloudflare-warp)?")) return;
+        setStatus("WARP (официальный): удаление…", false);
+        warpCfLogEl.textContent = "Удаление…";
+        const j = await api("/api/warp-cf/uninstall", {
+          method: "POST",
+          body: JSON.stringify({ rootPassword: pw }),
+        });
+        warpCfLogEl.textContent = j.output || "Удалено.";
+        warpCfStatusLine.textContent = "не установлен";
+        setStatus("", false);
+      } catch (e) {
+        setStatus(String(e?.message || e), true);
+      }
+    }),
+  );
+
+  warpCfActionsEl.appendChild(
+    btn("Применить пресет в Xray (3x‑ui: 127.0.0.1)", "btn small ghost", async () => {
+      try {
+        if (!pw) throw new Error("Введите пароль root.");
+        const filePath = String(warpCfXrayPath?.value || "").trim();
+        if (!filePath) throw new Error("Укажите путь к JSON конфигу Xray.");
+        const domains = String(warpCfDomains?.value || "").trim();
+        if (!confirm(`Внести изменения в ${filePath} (создадим .bak* рядом)?`)) return;
+        setStatus("Xray preset: применяю…", false);
+        warpCfLogEl.textContent = "Применение…";
+        const j = await api("/api/warp-cf/xray-apply", {
+          method: "POST",
+          body: JSON.stringify({
+            rootPassword: pw,
+            filePath,
+            socksAddress: "127.0.0.1",
+            socksPort: port,
+            domains,
+          }),
+        });
+        warpCfLogEl.textContent = JSON.stringify(j, null, 2);
+        setStatus("Готово (проверьте и перезапустите Xray/x-ui).", false);
+      } catch (e) {
+        setStatus(String(e?.message || e), true);
+      }
+    }),
+  );
+
+  warpCfActionsEl.appendChild(
+    btn("Применить пресет в Xray (Docker: 172.17.0.1)", "btn small ghost", async () => {
+      try {
+        if (!pw) throw new Error("Введите пароль root.");
+        const filePath = String(warpCfXrayPath?.value || "").trim();
+        if (!filePath) throw new Error("Укажите путь к JSON конфигу Xray.");
+        const domains = String(warpCfDomains?.value || "").trim();
+        if (!confirm(`Внести изменения в ${filePath} (создадим .bak* рядом)?`)) return;
+        setStatus("Xray preset: применяю…", false);
+        warpCfLogEl.textContent = "Применение…";
+        const j = await api("/api/warp-cf/xray-apply", {
+          method: "POST",
+          body: JSON.stringify({
+            rootPassword: pw,
+            filePath,
+            socksAddress: "172.17.0.1",
+            socksPort: port,
+            domains,
+          }),
+        });
+        warpCfLogEl.textContent = JSON.stringify(j, null, 2);
+        setStatus("Готово (проверьте и перезапустите Xray/контейнер).", false);
+      } catch (e) {
+        setStatus(String(e?.message || e), true);
+      }
+    }),
+  );
+}
+
 function escapeHtml(s) {
   return String(s)
     .replace(/&/g, "&amp;")
@@ -1691,6 +1589,7 @@ async function loadClients() {
       wgShowEl.textContent = data.wgShow || "";
     }
     renderWarpPanel(data);
+    void refreshWarpCfPanel();
     renderRows(data.clients);
     setStatus("", false);
     void refreshServerClock();
@@ -1707,6 +1606,7 @@ async function loadClients() {
     wgShowEl.textContent = "";
     peerCountEl.textContent = "";
     if (warpPanel) warpPanel.hidden = true;
+    if (warpCfPanel) warpCfPanel.hidden = true;
     if (mtprotoPanel) mtprotoPanel.hidden = true;
   }
 }
@@ -1803,4 +1703,5 @@ function initMtprotoLinkCopy() {
 initThemeSwitch();
 initMtprotoLinkCopy();
 void hydratePanelPromoFooter();
+if (warpCfPort) warpCfPort.addEventListener("input", () => redrawWarpCfPresets());
 boot();

@@ -2,7 +2,7 @@
   "name": "amnezia-admin",
   "version": "1.2.29",
   "private": true,
-  "description": "amnezia_web — открытая веб-панель AmneziaWG на VPS (Docker): FREE — просмотр/удаление клиентов, MTProto-прокси; PRO — полное управление и обновления.",
+  "description": "amnezia_web — открытая базовая веб-панель AmneziaWG на VPS (Docker): просмотр и удаление клиентов, MTProto-прокси.",
   "license": "MIT",
   "repository": {
     "type": "git",

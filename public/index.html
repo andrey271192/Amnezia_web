@@ -29,7 +29,7 @@
       <div class="panel-promo-links">
         <a class="panel-promo-a panel-promo-github-fixed" href="https://github.com/andrey271192/amnezia_web" target="_blank" rel="noopener noreferrer">⭐ GitHub</a>
         <span class="panel-promo-sep" aria-hidden="true">·</span>
-        <a id="panel-strip-donate" class="panel-promo-a" href="https://boosty.to/andrey27/purchase/3906453?ssource=DIRECT&amp;share=subscription_link" target="_blank" rel="noopener noreferrer">Поддержать проект</a>
+        <a id="panel-strip-donate" class="panel-promo-a" href="https://boosty.to/andrey27/donate" target="_blank" rel="noopener noreferrer">Поддержать проект</a>
         <span id="panel-strip-sep-donate-ozon" class="panel-promo-sep" aria-hidden="true">·</span>
         <a id="panel-strip-ozon" class="panel-promo-a" href="https://finance.ozon.ru/apps/sbp/ozonbankpay/019dc200-2a5d-7931-a619-782d285f6798" target="_blank" rel="noopener noreferrer">Донат · Ozon СБП</a>
         <span id="panel-strip-sep-ozon-tg" class="panel-promo-sep" aria-hidden="true">·</span>
@@ -53,7 +53,7 @@
         Поддержка веб‑панелей (вне этого сервера):<br/>
         <a href="https://github.com/andrey271192/amnezia_web" target="_blank" rel="noopener noreferrer">GitHub</a>
         <span class="gate-donate-dot" aria-hidden="true">·</span>
-        <a href="https://boosty.to/andrey27/purchase/3906453?ssource=DIRECT&amp;share=subscription_link" target="_blank" rel="noopener noreferrer">Boosty · PRO панели</a>
+        <a href="https://boosty.to/andrey27/donate" target="_blank" rel="noopener noreferrer">Boosty · донат</a>
         <span class="gate-donate-dot" aria-hidden="true">·</span>
         <a href="https://boosty.to/andrey27/donate" target="_blank" rel="noopener noreferrer">Донат</a>
         <span class="gate-donate-dot" aria-hidden="true">·</span>
@@ -68,8 +68,8 @@
     <header class="top">
       <div>
         <p class="eyebrow">Панель сервера</p>
-        <h1>Пользователи AmneziaWG FREE</h1>
-        <p class="sub">Базовая открытая панель: просмотр клиентов AmneziaWG и (после входа) установка Telegram MTProto‑прокси в Docker без PRO. Полное управление peer, экспорт .conf, каскад, Cloudflare WARP и синхронизация времени хоста — в версии PRO.</p>
+        <h1>Пользователи AmneziaWG</h1>
+        <p class="sub">Базовая панель: просмотр клиентов AmneziaWG, удаление peer с сервера и (после входа) установка Telegram MTProto‑прокси в Docker.</p>
       </div>
       <div class="token-box">
         <div class="theme-switch" role="group" aria-label="Тема оформления">
@@ -98,8 +98,6 @@
         </details>
       </div>
     </header>
-
-    <div id="edition-banner" class="edition-banner hidden" role="region" aria-label="Редакция панели"></div>
 
     <section class="toolbar">
       <div class="pill proto-pill"><span class="dot ok"></span><span id="proto-label">Протокол: AmneziaWG</span></div>
@@ -165,6 +163,53 @@
       </div>
     </details>
 
+    <details class="panel-fold warp-panel" id="warp-cf-panel" hidden>
+      <summary class="fold-summary">
+        <span class="fold-arrow" aria-hidden="true"></span>
+        <span class="fold-titles">
+          <span class="fold-h">Cloudflare WARP (официальный клиент · SOCKS5)</span>
+          <span class="muted fold-meta" id="warp-cf-status-line"></span>
+        </span>
+      </summary>
+      <div class="panel-fold-body">
+        <p class="muted warp-intro">
+          Это <strong>другой</strong> сценарий, чем блок выше: здесь ставится официальный пакет <code class="inline">cloudflare-warp</code> на <strong>хост VPS</strong>,
+          а <code class="inline">warp-cli</code> включается в режим <strong>Local Proxy</strong> (SOCKS5/HTTP) на <code class="inline">127.0.0.1:PORT</code> (по умолчанию 40000).
+          Для платного <strong>WARP+</strong> вставьте ключ лицензии и нажмите «Применить».
+        </p>
+
+        <div class="mtproto-fields warp-cf-fields">
+          <label for="warp-cf-root-pw">Пароль root на хосте VPS (не сохраняется)</label>
+          <input id="warp-cf-root-pw" type="password" autocomplete="off" placeholder="root пароль (для install/uninstall/status/license)">
+
+          <label for="warp-cf-port">SOCKS5 порт (127.0.0.1:PORT)</label>
+          <input id="warp-cf-port" type="number" min="512" max="65535" autocomplete="off" placeholder="40000">
+
+          <label for="warp-cf-license">WARP+ ключ (необязательно)</label>
+          <input id="warp-cf-license" type="text" autocomplete="off" placeholder="Вставьте ваш реальный WARP+ ключ">
+
+          <label for="warp-cf-xray-path">Путь к Xray JSON (3x‑ui / Amnezia)</label>
+          <input id="warp-cf-xray-path" type="text" autocomplete="off" placeholder="/etc/x-ui/xray/config.json или /opt/amnezia/.../server.json">
+
+          <label for="warp-cf-domains">Домены/geosite для routing (необязательно, через запятую)</label>
+          <input id="warp-cf-domains" type="text" autocomplete="off" placeholder="geosite:google,geosite:openai">
+        </div>
+
+        <div id="warp-cf-actions" class="warp-actions"></div>
+        <p id="warp-cf-banner" class="status ok hidden" role="status"></p>
+
+        <details class="raw warp-raw" open>
+          <summary>Лог / статус</summary>
+          <pre id="warp-cf-log"></pre>
+        </details>
+
+        <details class="raw warp-raw">
+          <summary>Пресеты для клиентов (3x‑ui / Amnezia)</summary>
+          <pre id="warp-cf-presets"></pre>
+        </details>
+      </div>
+    </details>
+
     <details class="panel-fold mtproto-panel" id="mtproto-panel" hidden>
       <summary class="fold-summary">
         <span class="fold-arrow" aria-hidden="true"></span>
@@ -175,7 +220,7 @@
       </summary>
       <div class="panel-fold-body">
         <p class="muted warp-intro mtproto-intro">
-          <strong>Во всех редакциях панели (FREE и PRO).</strong> Отдельный Docker‑контейнер (образ Telegram), публикация порта на хосте VPS.
+          <strong>Раздел доступен в базовой панели.</strong> Отдельный Docker‑контейнер (образ Telegram), публикация порта на хосте VPS.
           Ссылка вида <code class="inline">tg://proxy?…</code> может появляться без env, если панель открыта по публичному IP/DNS; для фиксированного хоста задайте <code class="inline">MTPRO_PUBLIC_HOST</code> или <code class="inline">CLIENT_CONFIG_ENDPOINT</code>
           (переменные контейнера панели, см. install.sh README).
           Сохраните <strong>секрет</strong>, который показывается один раз после установки — в интерфейсе он маскируется.
@@ -282,14 +327,14 @@
       <span class="support-sep" aria-hidden="true">·</span>
       <a href="https://github.com/andrey271192/amnezia_web" target="_blank" rel="noopener noreferrer">GitHub</a>
       <span id="footer-promo-gap1" class="support-sep" aria-hidden="true">·</span>
-      <a id="footer-promo-donate" class="support-promo-link" href="https://boosty.to/andrey27/purchase/3906453?ssource=DIRECT&amp;share=subscription_link" target="_blank" rel="noopener noreferrer">Поддержать проект</a>
+      <a id="footer-promo-donate" class="support-promo-link" href="https://boosty.to/andrey27/donate" target="_blank" rel="noopener noreferrer">Поддержать проект</a>
       <span id="footer-promo-sep-donate-ozon" class="support-sep" aria-hidden="true">·</span>
       <a id="footer-promo-ozon" class="support-promo-link" href="https://finance.ozon.ru/apps/sbp/ozonbankpay/019dc200-2a5d-7931-a619-782d285f6798" target="_blank" rel="noopener noreferrer">Донат · Ozon СБП</a>
       <span id="footer-promo-sep-ozon-tg" class="support-sep" aria-hidden="true">·</span>
       <a id="footer-promo-telegram" class="support-promo-link" href="https://t.me/lot_andrey" target="_blank" rel="noopener noreferrer">Telegram‑канал спонсора</a>
     </div>
     <p class="support-blurb">
-      AWG‑клиенты, статусы и MTProto‑прокси в FREE. Жёлтая шапка поддержки совпадает с подвалом; текст ссылок может подтягиваться с сервера (Boosty подписка / донат). На пользовательских лендингах блоков поддержки нет.
+      AWG‑клиенты, статусы и MTProto‑прокси. Жёлтая шапка поддержки совпадает с подвалом; текст ссылок может подтягиваться с сервера. На пользовательских лендингах блоков поддержки нет.
     </p>
   </footer>
 
